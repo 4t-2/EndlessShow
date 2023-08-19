@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -28,20 +29,17 @@ class Dialogue
 
 		Dialogue(std::string &line)
 		{
-			bool skip = false;
+			std::string *p = &name;
 
 			for (char &c : line)
 			{
-				if (skip)
-				{
-					continue;
-				}
-
 				if (c != ':')
 				{
-					name += c;
-					skip = true;
-					continue;
+					*p += c;
+				}
+				else
+				{
+					p = &content;
 				}
 			}
 		}
@@ -59,19 +57,33 @@ enum ElementType
 	Empty,
 };
 
-struct Sequence
+class Sequence
 {
+	public:
 		ElementType type	= ElementType::Empty;
 		void	   *element = nullptr;
+
+		~Sequence()
+		{
+			if (type == DialogueT)
+			{
+				delete (Dialogue *)element;
+			}
+			if (type == ActionT)
+			{
+				delete (Action *)element;
+			}
+		}
 };
 
-void splitNewline(std::string &s, std::vector<std::string> &vec)
+void splitNewline(std::fstream &fs, std::vector<std::string> &vec)
 {
-	std::stringstream ss(s);
-	std::string		  line;
-
-	while (ss >> line)
+	for (std::string line; !fs.eof(); std::getline(fs, line))
 	{
+		if (line == "")
+		{
+			continue;
+		}
 		vec.push_back(line);
 	}
 }
@@ -79,66 +91,72 @@ void splitNewline(std::string &s, std::vector<std::string> &vec)
 class Script
 {
 	public:
-		std::string			  title; // TITLE
-		std::vector<Sequence> sequence;
+		std::string title	 = ""; // TITLE
+		Sequence   *sequence = nullptr;
+		int			length	 = 0;
 
-		Script(std::string &buffer)
+		Script(std::fstream &fs)
 		{
 			std::vector<std::string> vector;
 
-			splitNewline(buffer, vector);
+			splitNewline(fs, vector);
 
-			sequence.reserve(vector.size() - 1);
+			title = vector[0].substr(1, vector[0].length() - 2);
 
-			for (std::string &line : vector)
+			length	 = vector.size() - 1;
+			sequence = new Sequence[length];
+
+			for (int i = 0; i < vector.size() - 1; i++)
 			{
-				static int i = 0;
+				std::string &line = vector[i + 1];
 
 				if (line[0] == '[')
 				{
 					sequence[i].type	= ElementType::ActionT;
-					sequence[i].element = new class Action(line);
+					sequence[i].element = new Action(line);
 				}
 				else
 				{
 					sequence[i].type	= ElementType::DialogueT;
-					sequence[i].element = new class Dialogue(line);
+					sequence[i].element = new Dialogue(line);
 				}
 
 				i++;
 			}
 		}
 
+		~Script()
+		{
+			delete[] sequence;
+		}
+
 		void print()
 		{
 			printf("%s\n", title.c_str());
 
-			for (Sequence &sequence : sequence)
+			for (int i = 0; i < length; i++)
 			{
-				if(sequence.type == DialogueT)
+				if (sequence[i].type == ActionT)
 				{
-					Dialogue *p = (Dialogue*)(sequence.element);
+					Action *p = (Action *)(sequence[i].element);
 					p->print();
 				}
-				if(sequence.type == DialogueT)
+				if (sequence[i].type == DialogueT)
 				{
-					Dialogue *p = (Dialogue*)(sequence.element);
+					Dialogue *p = (Dialogue *)(sequence[i].element);
 					p->print();
 				}
 			}
 		}
 };
 
-void cleanup(std::string &buffer)
-{
-}
-
 int main()
 {
-	std::string buffer = "";
+	std::fstream fs("script.txt", std::fstream::in);
 
-	cleanup(buffer);
+	Script script(fs);
 
-	Script script(buffer);
+	fs.close();
+
 	script.print();
 }

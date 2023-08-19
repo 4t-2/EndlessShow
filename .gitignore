@@ -1,3 +1,4 @@
 .cache/clangd/index
 bin/EndlessShow
 build
+bin/script.txt
