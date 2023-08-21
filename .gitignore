@@ -2,3 +2,5 @@
 bin/EndlessShow
 build
 bin/script.txt
+bin/tts/wav
+bin/tts/result

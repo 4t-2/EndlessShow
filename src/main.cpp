@@ -1,4 +1,6 @@
+#include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -130,7 +132,7 @@ class Script
 			delete[] sequence;
 		}
 
-		void print()
+		void loop(std::function<void(Action &action)> actionFunc, std::function<void(Dialogue &dialogue)> dialogueFunc)
 		{
 			printf("%s\n", title.c_str());
 
@@ -139,12 +141,12 @@ class Script
 				if (sequence[i].type == ActionT)
 				{
 					Action *p = (Action *)(sequence[i].element);
-					p->print();
+					actionFunc(*p);
 				}
 				if (sequence[i].type == DialogueT)
 				{
 					Dialogue *p = (Dialogue *)(sequence[i].element);
-					p->print();
+					dialogueFunc(*p);
 				}
 			}
 		}
@@ -158,5 +160,28 @@ int main()
 
 	fs.close();
 
-	script.print();
+	int wavIndex = 0;
+
+	script.loop([](Action &action) { action.print(); },
+				[&](Dialogue &dialogue) {
+					dialogue.print();
+
+					std::string msg = dialogue.content;
+
+					for (int i = 0; i < msg.length(); i++)
+					{
+						if (msg[i] == '"')
+						{
+							msg.replace(i, 1, "\\\"");
+							i++;
+						}
+					}
+
+					std::string cmd =
+						"cd tts && python3 tts.py \"" + msg + "\"" + " result/" + std::to_string(wavIndex) + ".wav";
+
+					std::system(cmd.c_str());
+
+					wavIndex++;
+				});
 }
