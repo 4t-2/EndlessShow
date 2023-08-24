@@ -4,3 +4,7 @@ build
 bin/script.txt
 bin/tts/wav
 bin/tts/result
+lib/AGL
+bin/tts/output.wav
+bin/untitled.mtl
+bin/untitled.obj
