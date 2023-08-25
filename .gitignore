@@ -8,3 +8,6 @@ lib/AGL
 bin/tts/output.wav
 bin/untitled.mtl
 bin/untitled.obj
+bin/blender
+bin/bigtex.png
+bin/scene.obj

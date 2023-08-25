@@ -180,8 +180,8 @@ int main()
 	// 				}
 	//
 	// 				std::string cmd =
-	// 					"cd tts && python3 tts.py \"" + msg + "\"" + "
-	// result/"
+	// 					"cd tts && python3 tts.py \"" + msg + "\"" +
+	// " result/"
 	// + std::to_string(wavIndex) + ".wav";
 	//
 	// 				std::system(cmd.c_str());
@@ -191,7 +191,7 @@ int main()
 
 	agl::RenderWindow window;
 	window.setup({1000, 1000}, "Window");
-	window.setClearColor(agl::Color::Red);
+	window.setClearColor(agl::Color::White);
 	window.setFPS(0);
 
 	agl::Event event;
@@ -218,16 +218,17 @@ int main()
 	window.updateMvp(camera);
 
 	agl::Texture blank;
-	blank.setBlank();
+	blank.loadFromFile("bigtex.png");
 
 	agl::Shape cube([&](agl::Shape &shape) {
 		std::vector<agl::Vec<float, 3>> vertex;
 		std::vector<agl::Vec<float, 2>> uv;
 		std::vector<agl::Vec<float, 3>> normal;
 
-		loadOBJ("untitled.obj", vertex, uv, normal);
+		loadOBJ("scene.obj", vertex, uv, normal);
 
 		float *vertexBufferData = new float[3 * vertex.size()];
+		float *normalBufferData = new float[3 * normal.size()];
 		float *UVBufferData		= new float[2 * uv.size()];
 
 		for (int i = 0; i < vertex.size(); i++)
@@ -235,7 +236,13 @@ int main()
 			vertexBufferData[(i * 3) + 0] = vertex[i].x;
 			vertexBufferData[(i * 3) + 1] = vertex[i].y;
 			vertexBufferData[(i * 3) + 2] = vertex[i].z;
-			std::cout << vertex[i] << '\n';
+		}
+
+		for (int i = 0; i < normal.size(); i++)
+		{
+			normalBufferData[(i * 3) + 0] = normal[i].x;
+			normalBufferData[(i * 3) + 1] = normal[i].y;
+			normalBufferData[(i * 3) + 2] = normal[i].z;
 		}
 
 		for (int i = 0; i < uv.size(); i++)
@@ -253,7 +260,7 @@ int main()
 	});
 
 	cube.setTexture(&blank);
-	cube.setColor(agl::Color::Blue);
+	cube.setColor(agl::Color::White);
 	cube.setPosition({0, 0, 0});
 	cube.setSize({1, 1, 1});
 
@@ -269,12 +276,31 @@ int main()
 
 		window.updateMvp(camera);
 
-		static int frame;
+		static int	 frame;
+		static float mul	= 30;
+		static float height = 5;
+
+		if (event.isKeyPressed(agl::Key::Up))
+		{
+			mul += .1;
+		}
+		if (event.isKeyPressed(agl::Key::Down))
+		{
+			mul -= .1;
+		}
+		if (event.isKeyPressed(agl::Key::Left))
+		{
+			height += .1;
+		}
+		if (event.isKeyPressed(agl::Key::Right))
+		{
+			height -= .1;
+		}
 
 		agl::Vec<float, 3> pos = agl::pointOnCircle(agl::degreeToRadian(frame));
-		pos.z = pos.y;
-		pos *= 3;
-		pos.y = 5;
+		pos.z				   = pos.y;
+		pos *= mul;
+		pos.y = height;
 
 		camera.setView(pos, {0, 0, 0}, {0, 1, 0});
 
