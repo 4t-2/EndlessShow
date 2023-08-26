@@ -1,4 +1,5 @@
 #include "../inc/loadOBJ.hpp"
+#include "AGL/include/ShaderBuilder.hpp"
 #include "AGL/include/math.hpp"
 #include <cstdlib>
 #include <fstream>
@@ -6,153 +7,6 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
-
-// [ACTION]
-class Action
-{
-	public:
-		std::string action;
-
-		Action(std::string &line)
-		{
-			action = line.substr(1, line.length() - 2);
-		}
-
-		void print()
-		{
-			printf("[%s]\n", action.c_str());
-		}
-};
-
-// NAME: CONTENT
-class Dialogue
-{
-	public:
-		std::string name;
-		std::string content;
-
-		Dialogue(std::string &line)
-		{
-			std::string *p = &name;
-
-			for (char &c : line)
-			{
-				if (c != ':')
-				{
-					*p += c;
-				}
-				else
-				{
-					p = &content;
-				}
-			}
-		}
-
-		void print()
-		{
-			printf("%s: %s\n", name.c_str(), content.c_str());
-		}
-};
-
-enum ElementType
-{
-	DialogueT,
-	ActionT,
-	Empty,
-};
-
-class Sequence
-{
-	public:
-		ElementType type	= ElementType::Empty;
-		void	   *element = nullptr;
-
-		~Sequence()
-		{
-			if (type == DialogueT)
-			{
-				delete (Dialogue *)element;
-			}
-			if (type == ActionT)
-			{
-				delete (Action *)element;
-			}
-		}
-};
-
-void splitNewline(std::fstream &fs, std::vector<std::string> &vec)
-{
-	for (std::string line; !fs.eof(); std::getline(fs, line))
-	{
-		if (line == "")
-		{
-			continue;
-		}
-		vec.push_back(line);
-	}
-}
-
-class Script
-{
-	public:
-		std::string title	 = ""; // TITLE
-		Sequence   *sequence = nullptr;
-		int			length	 = 0;
-
-		Script(std::fstream &fs)
-		{
-			std::vector<std::string> vector;
-
-			splitNewline(fs, vector);
-
-			title = vector[0].substr(1, vector[0].length() - 2);
-
-			length	 = vector.size() - 1;
-			sequence = new Sequence[length];
-
-			for (int i = 0; i < vector.size() - 1; i++)
-			{
-				std::string &line = vector[i + 1];
-
-				if (line[0] == '[')
-				{
-					sequence[i].type	= ElementType::ActionT;
-					sequence[i].element = new Action(line);
-				}
-				else
-				{
-					sequence[i].type	= ElementType::DialogueT;
-					sequence[i].element = new Dialogue(line);
-				}
-
-				i++;
-			}
-		}
-
-		~Script()
-		{
-			delete[] sequence;
-		}
-
-		void loop(std::function<void(Action &action)> actionFunc, std::function<void(Dialogue &dialogue)> dialogueFunc)
-		{
-			printf("%s\n", title.c_str());
-
-			for (int i = 0; i < length; i++)
-			{
-				if (sequence[i].type == ActionT)
-				{
-					Action *p = (Action *)(sequence[i].element);
-					actionFunc(*p);
-				}
-				if (sequence[i].type == DialogueT)
-				{
-					Dialogue *p = (Dialogue *)(sequence[i].element);
-					dialogueFunc(*p);
-				}
-			}
-		}
-};
 
 int main()
 {
@@ -180,8 +34,9 @@ int main()
 	// 				}
 	//
 	// 				std::string cmd =
-	// 					"cd tts && python3 tts.py \"" + msg + "\"" +
-	// " result/"
+	// 					"cd tts && python3 tts.py \"" + msg +
+	// "\""
+	// + " result/"
 	// + std::to_string(wavIndex) + ".wav";
 	//
 	// 				std::system(cmd.c_str());
@@ -191,16 +46,57 @@ int main()
 
 	agl::RenderWindow window;
 	window.setup({1000, 1000}, "Window");
-	window.setClearColor(agl::Color::White);
+	window.setClearColor({16, 16, 32});
 	window.setFPS(0);
 
 	agl::Event event;
 	event.setWindow(window);
 
 	agl::ShaderBuilder sv;
-	sv.setDefaultVert();
+	{
+		using namespace agl;
+
+		ADD_LAYOUT(0, agl::vec3, position, (&sv));
+		ADD_LAYOUT(1, agl::vec2, vertexUV, (&sv));
+		ADD_LAYOUT(2, agl::vec3, normal, (&sv));
+
+		ADD_UNIFORM(agl::mat4, transform, (&sv));
+		ADD_UNIFORM(agl::mat4, mvp, (&sv));
+		ADD_UNIFORM(agl::vec3, shapeColor, (&sv));
+		ADD_UNIFORM(agl::mat4, textureTransform, (&sv));
+
+		ADD_OUT(agl::vec2, UVcoord, (&sv));
+		ADD_OUT(agl::vec4, fragColor, (&sv));
+
+		sv.setMain({
+			UVcoord =
+				shaderFunc("vec2", "(" + (textureTransform * shaderFunc("vec4", vertexUV, 1, 1)).code + ").xy"), //
+																												 //
+			fragColor = shaderFunc(
+				"vec4",
+				shaderFunc("vec3", .1, .1, .1) +
+					shapeColor * shaderFunc("clamp", shaderFunc("dot", normal, shaderFunc("vec3", 1., 1., 1.)), 0., 1.),
+				1),																	  //
+																					  //
+			val(val::gl_Position) = mvp * transform * shaderFunc("vec4", position, 1) //
+		});
+	}
+
 	agl::ShaderBuilder sf;
-	sf.setDefaultFrag();
+	{
+		using namespace agl;
+
+		ADD_IN(agl::vec2, UVcoord, (&sf));
+		ADD_IN(agl::vec4, fragColor, (&sf));
+
+		ADD_OUT(agl::vec4, color, (&sf));
+
+		ADD_UNIFORM(agl::sampler2D, myTextureSampler, (&sf));
+
+		sf.setMain({
+			color = fragColor * shaderFunc("texture", myTextureSampler, UVcoord), //
+		});
+	}
 
 	std::string vertSrc = sv.getSrc();
 	std::string fragSrc = sf.getSrc();
@@ -251,9 +147,12 @@ int main()
 			UVBufferData[(i * 2) + 1] = uv[i].y;
 		}
 
-		shape.genBuffers();
+		agl::GLPrimative &shapeData = *(agl::GLPrimative *)(long(&shape) + 456);
+
+		shapeData.genBuffers(3);
 		shape.setMode(GL_TRIANGLES);
 		shape.setBufferData(vertexBufferData, UVBufferData, vertex.size());
+		shapeData.setBufferData(2, normalBufferData, 3);
 
 		delete[] vertexBufferData;
 		delete[] UVBufferData;
@@ -274,36 +173,68 @@ int main()
 
 		window.display();
 
+		static agl::Vec<float, 3> pos;
+		static agl::Vec<float, 3> rot;
+
+		float speedPos = .1;
+		float speedRot = 1;
+
+		if(event.isKeyPressed(agl::Key::W))
+		{
+			pos.z+=cos(agl::degreeToRadian(rot.y)) * speedPos;
+			pos.x+=sin(agl::degreeToRadian(rot.y)) * speedPos;
+		}
+		if(event.isKeyPressed(agl::Key::S))
+		{
+			pos.z-=cos(agl::degreeToRadian(rot.y)) * speedPos;
+			pos.x-=sin(agl::degreeToRadian(rot.y)) * speedPos;
+		}
+		if(event.isKeyPressed(agl::Key::A))
+		{
+			pos.z-=sin(agl::degreeToRadian(rot.y)) * speedPos;
+			pos.x+=cos(agl::degreeToRadian(rot.y)) * speedPos;
+		}
+		if(event.isKeyPressed(agl::Key::D))
+		{
+			pos.z+=sin(agl::degreeToRadian(rot.y)) * speedPos;
+			pos.x-=cos(agl::degreeToRadian(rot.y)) * speedPos;
+		}
+		if(event.isKeyPressed(agl::Key::Space))
+		{
+			pos.y-=speedPos;
+		}
+		if(event.isKeyPressed(agl::Key::LeftControl))
+		{
+			pos.y+=speedPos;
+		}
+
+		if(event.isKeyPressed(agl::Key::Up))
+		{
+			rot.x-=speedRot;
+		}
+		if(event.isKeyPressed(agl::Key::Down))
+		{
+			rot.x+=speedRot;
+		}
+		if(event.isKeyPressed(agl::Key::Left))
+		{
+			rot.y+=speedRot;
+		}
+		if(event.isKeyPressed(agl::Key::Right))
+		{
+			rot.y-=speedRot;
+		}
+
+		agl::Mat4f &view = *(agl::Mat4f*)(long(&camera) + 64);
+
+		agl::Mat4f rotate;
+		agl::Mat4f translate;
+
+		translate.translate(pos);
+		rotate.rotate(rot);
+
+		view = rotate * translate;
+	
 		window.updateMvp(camera);
-
-		static int	 frame;
-		static float mul	= 30;
-		static float height = 5;
-
-		if (event.isKeyPressed(agl::Key::Up))
-		{
-			mul += .1;
-		}
-		if (event.isKeyPressed(agl::Key::Down))
-		{
-			mul -= .1;
-		}
-		if (event.isKeyPressed(agl::Key::Left))
-		{
-			height += .1;
-		}
-		if (event.isKeyPressed(agl::Key::Right))
-		{
-			height -= .1;
-		}
-
-		agl::Vec<float, 3> pos = agl::pointOnCircle(agl::degreeToRadian(frame));
-		pos.z				   = pos.y;
-		pos *= mul;
-		pos.y = height;
-
-		camera.setView(pos, {0, 0, 0}, {0, 1, 0});
-
-		frame++;
 	}
 }
