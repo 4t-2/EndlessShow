@@ -81,8 +81,6 @@ Script::Script(std::fstream &fs)
 			sequence[i].type	= ElementType::DialogueT;
 			sequence[i].element = new Dialogue(line);
 		}
-
-		i++;
 	}
 }
 
