@@ -89,21 +89,27 @@ Script::~Script()
 	delete[] sequence;
 }
 
-void Script::loop(std::function<void(Action &action)> actionFunc, std::function<void(Dialogue &dialogue)> dialogueFunc)
+void Script::loop(std::function<int(Action &action)> actionFunc, std::function<int(Dialogue &dialogue)> dialogueFunc)
 {
 	printf("%s\n", title.c_str());
+	int code = 0;
 
 	for (int i = 0; i < length; i++)
 	{
 		if (sequence[i].type == ActionT)
 		{
 			Action *p = (Action *)(sequence[i].element);
-			actionFunc(*p);
+			code = actionFunc(*p);
 		}
 		if (sequence[i].type == DialogueT)
 		{
 			Dialogue *p = (Dialogue *)(sequence[i].element);
-			dialogueFunc(*p);
+			code = dialogueFunc(*p);
+		}
+
+		if(code)
+		{
+			return;
 		}
 	}
 }

@@ -55,5 +55,5 @@ class Script
 
 		~Script();
 
-		void loop(std::function<void(Action &action)> actionFunc, std::function<void(Dialogue &dialogue)> dialogueFunc);
+		void loop(std::function<int(Action &action)> actionFunc, std::function<int(Dialogue &dialogue)> dialogueFunc);
 };

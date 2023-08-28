@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <sstream>
 
 #define TEXTPADDING 8
 
@@ -25,32 +26,57 @@ void genAudio(Script &script)
 
 	int wavIndex = 0;
 
-	script.loop([](Action &action) { action.print(); },
-				[&](Dialogue &dialogue) {
-					dialogue.print();
+	script.loop(
+		[](Action &action) -> int {
+			action.print();
+			return 0;
+		},
+		[&](Dialogue &dialogue) -> int {
+			dialogue.print();
 
-					std::string msg = dialogue.content;
+			std::string msg = dialogue.content;
 
-					for (int i = 0; i < msg.length(); i++)
-					{
-						if (msg[i] == '"')
-						{
-							msg.replace(i, 1, "\\\"");
-							i++;
-						}
-					}
+			for (int i = 0; i < msg.length(); i++)
+			{
+				if (msg[i] == '"')
+				{
+					msg.replace(i, 1, "\\\"");
+					i++;
+				}
+			}
 
-					auto safeStr = [&](std::string str) { return "\"" + str + "\""; };
+			auto safeStr = [&](std::string str) { return "\"" + str + "\""; };
 
-					std::string cmd = "cd tts && python3 tts.py " + safeStr(msg) + " " + dialogue.name + " " +
-									  std::to_string(wavIndex) + ".wav";
+			std::string voice;
 
-					std::cout << cmd << '\n';
+			if (dialogue.name == "Joey")
+			{
+				voice = "schlatt";
+			}
+			else if (dialogue.name == "Michael")
+			{
+				voice = "narrator";
+			}
+			else if (dialogue.name == "Andrew")
+			{
+				voice = "joe";
+			}
+			else
+			{
+				return 1;
+			}
 
-					std::system(cmd.c_str());
+			std::string cmd =
+				"cd tts && python3 tts.py " + safeStr(msg) + " " + voice + " " + std::to_string(wavIndex) + ".wav";
 
-					wavIndex++;
-				});
+			std::cout << cmd << '\n';
+
+			std::system(cmd.c_str());
+
+			wavIndex++;
+
+			return 0;
+		});
 }
 
 void renderPodcast(Script &script)
@@ -70,19 +96,22 @@ void renderPodcast(Script &script)
 		int wavIndex = 0;
 
 		script.loop(
-			[&](Action &currAction) {
+			[&](Action &currAction) -> int {
 				action = &currAction;
-				return;
+				return 0;
 			},
-			[&](Dialogue &currDialogue) {
+			[&](Dialogue &currDialogue) -> int {
 				dialogue = &currDialogue;
 
 				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
 
 				wavIndex++;
 
-				return;
+				return 0;
 			});
+
+		dialogue = nullptr;
+		action = nullptr;
 	};
 
 	agl::Shader shaderScene;
@@ -188,12 +217,14 @@ void renderPodcast(Script &script)
 	subtitles.setScale(1);
 	subtitles.setColor(agl::Color::White);
 
-	agl::Shape cube([&](agl::Shape &shape) {
+	std::string objPath = "assets/scene.obj";
+
+	auto objToShape = [&](agl::Shape &shape) {
 		std::vector<agl::Vec<float, 3>> vertex;
 		std::vector<agl::Vec<float, 2>> uv;
 		std::vector<agl::Vec<float, 3>> normal;
 
-		loadOBJ("assets/scene.obj", vertex, uv, normal);
+		loadOBJ(objPath.c_str(), vertex, uv, normal);
 
 		float *vertexBufferData = new float[3 * vertex.size()];
 		float *normalBufferData = new float[3 * normal.size()];
@@ -228,14 +259,36 @@ void renderPodcast(Script &script)
 
 		delete[] vertexBufferData;
 		delete[] UVBufferData;
-	});
+	};
 
-	cube.setTexture(&sceneTexture);
-	cube.setColor(agl::Color::White);
-	cube.setPosition({0, 0, 0});
-	cube.setSize({1, 1, 1});
+	agl::Shape scene(objToShape);
+	scene.setTexture(&sceneTexture);
+	scene.setColor(agl::Color::White);
+	scene.setPosition({0, 0, 0});
+	scene.setSize({1, 1, 1});
 
-	while(!event.isKeyPressed(agl::Key::Return))
+	objPath = "assets/j1.obj";
+	agl::Shape jaw1(objToShape);
+	jaw1.setTexture(&sceneTexture);
+	jaw1.setColor(agl::Color::White);
+	jaw1.setPosition({-3.99502, 4.69708, 0.000001});
+	jaw1.setSize({1, 1, 1});
+
+	objPath = "assets/j2.obj";
+	agl::Shape jaw2(objToShape);
+	jaw2.setTexture(&sceneTexture);
+	jaw2.setColor(agl::Color::White);
+	jaw2.setPosition({4.3209, 5.25919, 0});
+	jaw2.setSize({1, 1, 1});
+
+	objPath = "assets/j3.obj";
+	agl::Shape jaw3(objToShape);
+	jaw3.setTexture(&sceneTexture);
+	jaw3.setColor(agl::Color::White);
+	jaw3.setPosition({0, 4.59805, -4.0351});
+	jaw3.setSize({1, 1, 1});
+
+	while (!event.isKeyPressed(agl::Key::Return))
 	{
 		event.poll();
 	}
@@ -258,7 +311,10 @@ void renderPodcast(Script &script)
 		shaderScene.use();
 		window.updateMvp(camera);
 
-		window.drawShape(cube);
+		window.drawShape(scene);
+		window.drawShape(jaw1);
+		window.drawShape(jaw2);
+		window.drawShape(jaw3);
 
 		window.getShaderUniforms(shaderUI);
 		shaderUI.use();
@@ -275,8 +331,41 @@ void renderPodcast(Script &script)
 
 		window.drawShape(subBack);
 		window.drawText(subtitles);
-
 		window.display();
+
+		static int frame = 0;
+		frame += 1;
+
+		if (dialogue != nullptr)
+		{
+			float jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
+			jawRotation *= 40;
+
+			if (dialogue->name == "Joey")
+			{
+				jaw1.setRotation({0, 0, jawRotation});
+				jaw2.setRotation({0, 0, 0});
+				jaw3.setRotation({0, 0, 0});
+			}
+			if (dialogue->name == "Michael")
+			{
+				jaw1.setRotation({0, 0, 0});
+				jaw2.setRotation({0, 0, -jawRotation});
+				jaw3.setRotation({0, 0, 0});
+			}
+			if (dialogue->name == "Andrew")
+			{
+				jaw1.setRotation({0, 0, 0});
+				jaw2.setRotation({0, 0, 0});
+				jaw3.setRotation({jawRotation, 0, 0});
+			}
+		}
+		else
+		{
+			jaw1.setRotation({0, 0, 0});
+			jaw2.setRotation({0, 0, 0});
+			jaw3.setRotation({0, 0, 0});
+		}
 
 		static agl::Vec<float, 3> pos;
 		static agl::Vec<float, 3> rot;
@@ -328,6 +417,25 @@ void renderPodcast(Script &script)
 		if (event.isKeyPressed(agl::Key::Right))
 		{
 			rot.y -= speedRot;
+		}
+
+		if(dialogue != nullptr)
+		{
+			if (dialogue->name == "Joey")
+			{
+				pos = {1.74179, -3.9, -0.727935};
+				rot = {-5, 68, 0};
+			}
+			if (dialogue->name == "Michael")
+			{
+				pos = {-2.93833, -6, -1.66266};
+				rot = {36, -43, 0};
+			}
+			if (dialogue->name == "Andrew")
+			{
+				pos = {0, -4.8, 3.34516};
+				rot = {0, 0, 0};
+			}
 		}
 
 		agl::Mat4f &view = *(agl::Mat4f *)(long(&camera) + 64);
