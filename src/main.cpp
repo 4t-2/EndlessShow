@@ -11,17 +11,16 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <sstream>
 
 #define TEXTPADDING 8
 
-void genAudio(Script &script)
+int genAudio(Script &script)
 {
 	if (std::filesystem::exists("tts/result/0.wav"))
 	{
 		std::cout << "SKIPPED AUDIO, DETECTED FILES" << '\n';
 
-		return;
+		return 0;
 	}
 
 	int wavIndex = 0;
@@ -77,6 +76,8 @@ void genAudio(Script &script)
 
 			return 0;
 		});
+
+	return 1;
 }
 
 void renderPodcast(Script &script)
@@ -97,11 +98,16 @@ void renderPodcast(Script &script)
 
 		script.loop(
 			[&](Action &currAction) -> int {
-				action = &currAction;
+				dialogue = nullptr;
+				action	 = &currAction;
+
+				std::this_thread::sleep_for(std::chrono::seconds(3));
+
 				return 0;
 			},
 			[&](Dialogue &currDialogue) -> int {
 				dialogue = &currDialogue;
+				action	 = nullptr;
 
 				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
 
@@ -111,7 +117,7 @@ void renderPodcast(Script &script)
 			});
 
 		dialogue = nullptr;
-		action = nullptr;
+		action	 = nullptr;
 	};
 
 	agl::Shader shaderScene;
@@ -205,7 +211,7 @@ void renderPodcast(Script &script)
 
 	agl::Rectangle subBack;
 	subBack.setPosition({0, 0});
-	subBack.setColor(agl::Color::Black);
+	subBack.setColor({0, 0, 0});
 	subBack.setSize({0, 30});
 	subBack.setTexture(&blank);
 
@@ -322,15 +328,18 @@ void renderPodcast(Script &script)
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
-		agl::Vec textEnd  = window.drawText(subtitles);
-		agl::Vec textSize = textEnd - subtitles.getPosition();
+		subtitles.setPosition(state.size);
+		agl::Vec textEnd = window.drawText(subtitles, state.size.x - TEXTPADDING);
 
-		subBack.setSize({textSize.x + (TEXTPADDING * 3), (float)(font.getHeight() + (TEXTPADDING * 2))});
+		subBack.setSize(state.size);
+
+		subtitles.setPosition({TEXTPADDING, (float)(state.size.y - font.getHeight() - TEXTPADDING) - textEnd.y, 1});
+		subBack.setPosition({0, (float)(state.size.y - font.getHeight() - (TEXTPADDING * 2)) - textEnd.y, 0});
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
 		window.drawShape(subBack);
-		window.drawText(subtitles);
+		window.drawText(subtitles, state.size.x - TEXTPADDING);
 		window.display();
 
 		static int frame = 0;
@@ -419,7 +428,7 @@ void renderPodcast(Script &script)
 			rot.y -= speedRot;
 		}
 
-		if(dialogue != nullptr)
+		if (dialogue != nullptr)
 		{
 			if (dialogue->name == "Joey")
 			{
@@ -437,6 +446,11 @@ void renderPodcast(Script &script)
 				rot = {0, 0, 0};
 			}
 		}
+		else if (action != nullptr)
+		{
+			pos = {0, -4, -4};
+			rot = {0, 0, 0};
+		}
 
 		agl::Mat4f &view = *(agl::Mat4f *)(long(&camera) + 64);
 
@@ -451,8 +465,10 @@ void renderPodcast(Script &script)
 		if (dialogue != nullptr)
 		{
 			subtitles.setText(dialogue->name + ": " + dialogue->content);
-			subtitles.setPosition({TEXTPADDING, (float)(state.size.y - font.getHeight() - TEXTPADDING), 1});
-			subBack.setPosition({0, (float)(state.size.y - font.getHeight() - (TEXTPADDING * 2)), 0});
+		}
+		else if (action != nullptr)
+		{
+			subtitles.setText("[ " + action->action + " ]");
 		}
 	}
 }
@@ -465,7 +481,10 @@ int main()
 
 	fs.close();
 
-	genAudio(script);
+	if (genAudio(script))
+	{
+		return 0;
+	}
 	renderPodcast(script);
 
 	exit(0);
