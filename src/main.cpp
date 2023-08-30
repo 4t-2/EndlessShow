@@ -90,36 +90,6 @@ void renderPodcast(Script &script)
 	agl::Event event;
 	event.setWindow(window);
 
-	Dialogue *dialogue = (Dialogue *)script.sequence[0].element;
-	Action	 *action   = nullptr;
-
-	auto threadFunc = [&]() {
-		int wavIndex = 0;
-
-		script.loop(
-			[&](Action &currAction) -> int {
-				dialogue = nullptr;
-				action	 = &currAction;
-
-				std::this_thread::sleep_for(std::chrono::seconds(3));
-
-				return 0;
-			},
-			[&](Dialogue &currDialogue) -> int {
-				dialogue = &currDialogue;
-				action	 = nullptr;
-
-				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
-
-				wavIndex++;
-
-				return 0;
-			});
-
-		dialogue = nullptr;
-		action	 = nullptr;
-	};
-
 	agl::Shader shaderScene;
 
 	{
@@ -222,6 +192,7 @@ void renderPodcast(Script &script)
 	subtitles.setPosition({0, 0});
 	subtitles.setScale(1);
 	subtitles.setColor(agl::Color::White);
+	subtitles.setText("");
 
 	std::string objPath = "assets/scene.obj";
 
@@ -294,15 +265,71 @@ void renderPodcast(Script &script)
 	jaw3.setPosition({0, 4.59805, -4.0351});
 	jaw3.setSize({1, 1, 1});
 
+	agl::Vec<float, 3> pos;
+	agl::Vec<float, 3> rot;
+	int				   frame	   = 0;
+	float			   jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
+	jawRotation *= 40;
+	bool closeMouth = false;
+	std::string subContent = "";
+
 	while (!event.isKeyPressed(agl::Key::Return))
 	{
 		event.poll();
 	}
 
+	auto threadFunc = [&]() {
+		int wavIndex = 0;
+
+		script.loop(
+			[&](Action &action) -> int {
+				subContent = "[ " + action.action + " ]";
+				pos	  = {0, -4, -4};
+				rot	  = {0, 0, 0};
+				closeMouth = true;
+
+				std::this_thread::sleep_for(std::chrono::seconds(3));
+
+				return 0;
+			},
+			[&](Dialogue &dialogue) -> int {
+				subContent = dialogue.name + ": " + dialogue.content;
+
+				if (dialogue.name == "Joey")
+				{
+					pos = {1.74179, -3.9, -0.727935};
+					rot = {-5, 68, 0};
+				}
+				if (dialogue.name == "Michael")
+				{
+					pos = {-2.93833, -6, -1.66266};
+					rot = {36, -43, 0};
+				}
+				if (dialogue.name == "Andrew")
+				{
+					pos = {0, -4.8, 3.34516};
+					rot = {0, 0, 0};
+				}
+
+				closeMouth = false;
+
+				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
+
+				wavIndex++;
+
+				return 0;
+			});
+	};
+
 	std::thread scriptThread(threadFunc);
 
 	while (!event.windowClose())
 	{
+		frame += 1;
+		jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
+		jawRotation *= 40;
+		subtitles.setText(subContent);
+
 		event.poll();
 
 		state = window.getState();
@@ -342,32 +369,11 @@ void renderPodcast(Script &script)
 		window.drawText(subtitles, state.size.x - TEXTPADDING);
 		window.display();
 
-		static int frame = 0;
-		frame += 1;
-
-		if (dialogue != nullptr)
+		if (!closeMouth)
 		{
-			float jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
-			jawRotation *= 40;
-
-			if (dialogue->name == "Joey")
-			{
-				jaw1.setRotation({0, 0, jawRotation});
-				jaw2.setRotation({0, 0, 0});
-				jaw3.setRotation({0, 0, 0});
-			}
-			if (dialogue->name == "Michael")
-			{
-				jaw1.setRotation({0, 0, 0});
-				jaw2.setRotation({0, 0, -jawRotation});
-				jaw3.setRotation({0, 0, 0});
-			}
-			if (dialogue->name == "Andrew")
-			{
-				jaw1.setRotation({0, 0, 0});
-				jaw2.setRotation({0, 0, 0});
-				jaw3.setRotation({jawRotation, 0, 0});
-			}
+			jaw1.setRotation({0, 0, jawRotation});
+			jaw2.setRotation({0, 0, -jawRotation});
+			jaw3.setRotation({jawRotation, 0, 0});
 		}
 		else
 		{
@@ -375,9 +381,6 @@ void renderPodcast(Script &script)
 			jaw2.setRotation({0, 0, 0});
 			jaw3.setRotation({0, 0, 0});
 		}
-
-		static agl::Vec<float, 3> pos;
-		static agl::Vec<float, 3> rot;
 
 		float speedPos = .1;
 		float speedRot = 1;
@@ -428,30 +431,6 @@ void renderPodcast(Script &script)
 			rot.y -= speedRot;
 		}
 
-		if (dialogue != nullptr)
-		{
-			if (dialogue->name == "Joey")
-			{
-				pos = {1.74179, -3.9, -0.727935};
-				rot = {-5, 68, 0};
-			}
-			if (dialogue->name == "Michael")
-			{
-				pos = {-2.93833, -6, -1.66266};
-				rot = {36, -43, 0};
-			}
-			if (dialogue->name == "Andrew")
-			{
-				pos = {0, -4.8, 3.34516};
-				rot = {0, 0, 0};
-			}
-		}
-		else if (action != nullptr)
-		{
-			pos = {0, -4, -4};
-			rot = {0, 0, 0};
-		}
-
 		agl::Mat4f &view = *(agl::Mat4f *)(long(&camera) + 64);
 
 		agl::Mat4f rotate;
@@ -461,15 +440,6 @@ void renderPodcast(Script &script)
 		rotate.rotate(rot);
 
 		view = rotate * translate;
-
-		if (dialogue != nullptr)
-		{
-			subtitles.setText(dialogue->name + ": " + dialogue->content);
-		}
-		else if (action != nullptr)
-		{
-			subtitles.setText("[ " + action->action + " ]");
-		}
 	}
 }
 
