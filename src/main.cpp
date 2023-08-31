@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -79,6 +80,73 @@ int genAudio(Script &script)
 
 	return 1;
 }
+
+class Tweet
+{
+	public:
+		std::string author;
+		std::string content;
+
+		Tweet(std::string &line)
+		{
+			std::string *p = &author;
+
+			for (int i = 0; i < line.length(); i++)
+			{
+				char &c = line[i];
+
+				if (c != ':')
+				{
+					*p += c;
+				}
+				else
+				{
+					p = &content;
+					i++;
+				}
+			}
+		}
+};
+
+class Article
+{
+	public:
+		Article(std::string &line)
+		{
+			std::string *p = &title;
+
+			for (char &c : line)
+			{
+				if (c != ':')
+				{
+					*p += c;
+				}
+				else
+				{
+					p = &subtext;
+				}
+			}
+		}
+		std::string title;
+		std::string subtext;
+};
+
+template <typename T> class ThreadSafe
+{
+	private:
+		T		   t;
+		std::mutex mx;
+
+	public:
+		void use(std::function<void(T &t)> func)
+		{
+			mx.lock();
+
+			func(t);
+
+			mx.unlock();
+		}
+};
 
 void renderPodcast(Script &script)
 {
@@ -270,8 +338,10 @@ void renderPodcast(Script &script)
 	int				   frame	   = 0;
 	float			   jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
 	jawRotation *= 40;
-	bool closeMouth = false;
+	bool		closeMouth = false;
 	std::string subContent = "";
+	Tweet	   *tweet	   = nullptr;
+	Article	   *article	   = nullptr;
 
 	while (!event.isKeyPressed(agl::Key::Return))
 	{
@@ -284,11 +354,45 @@ void renderPodcast(Script &script)
 		script.loop(
 			[&](Action &action) -> int {
 				subContent = "[ " + action.action + " ]";
-				pos	  = {0, -4, -4};
-				rot	  = {0, 0, 0};
+				pos		   = {0, -4, -4};
+				rot		   = {0, 0, 0};
 				closeMouth = true;
 
+				int			i = 0;
+				std::string actype;
+
+				for (i = 0; i < action.action.length(); i++)
+				{
+					if (action.action[i] == ' ')
+					{
+						i++;
+						break;
+					}
+					actype += action.action[i];
+				}
+
+				std::string str = action.action.substr(i, action.action.length() - i);
+
+				if (actype == "TWEET")
+				{
+					tweet	   = new Tweet(str);
+					subContent = "|" + tweet->author + "-" + tweet->content + "|";
+				}
+				else if (actype == "ARTICLE")
+				{
+					article = new Article(str);
+				}
+
 				std::this_thread::sleep_for(std::chrono::seconds(3));
+
+				if (tweet != nullptr)
+				{
+					delete tweet;
+				}
+				if (article != nullptr)
+				{
+					delete tweet;
+				}
 
 				return 0;
 			},
@@ -313,7 +417,9 @@ void renderPodcast(Script &script)
 
 				closeMouth = false;
 
-				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
+				// std::system(("cd tts/result && aplay " + std::to_string(wavIndex) +
+				// ".wav").c_str());
+				std::this_thread::sleep_for(std::chrono::seconds(3));
 
 				wavIndex++;
 
