@@ -148,7 +148,7 @@ template <typename T> class ThreadSafe
 		}
 };
 
-void renderPodcast(Script &script)
+void render(Script &script)
 {
 	agl::RenderWindow window;
 	window.setup({1000, 1000}, "Window");
@@ -247,6 +247,9 @@ void renderPodcast(Script &script)
 	agl::Texture blank;
 	blank.setBlank();
 
+	agl::Texture iconDef;
+	iconDef.loadFromFile("./assets/twitterdefault.png");
+
 	agl::Rectangle subBack;
 	subBack.setPosition({0, 0});
 	subBack.setColor({0, 0, 0});
@@ -255,12 +258,16 @@ void renderPodcast(Script &script)
 
 	agl::Font font;
 	font.setup("/usr/share/fonts/TTF/Arial.TTF", 24);
-	agl::Text subtitles;
-	subtitles.setFont(&font);
-	subtitles.setPosition({0, 0});
-	subtitles.setScale(1);
-	subtitles.setColor(agl::Color::White);
-	subtitles.setText("");
+
+	agl::Font fontLarge;
+	fontLarge.setup("/usr/share/fonts/TTF/Arial.TTF", 36);
+
+	agl::Text text;
+	text.setFont(&font);
+	text.setPosition({0, 0});
+	text.setScale(1);
+	text.setColor(agl::Color::White);
+	text.setText("");
 
 	std::string objPath = "assets/scene.obj";
 
@@ -333,6 +340,10 @@ void renderPodcast(Script &script)
 	jaw3.setPosition({0, 4.59805, -4.0351});
 	jaw3.setSize({1, 1, 1});
 
+	agl::Rectangle rect;
+	rect.setTexture(&blank);
+	rect.setColor(agl::Color::White);
+
 	agl::Vec<float, 3> pos;
 	agl::Vec<float, 3> rot;
 	int				   frame	   = 0;
@@ -353,7 +364,6 @@ void renderPodcast(Script &script)
 
 		script.loop(
 			[&](Action &action) -> int {
-				subContent = "[ " + action.action + " ]";
 				pos		   = {0, -4, -4};
 				rot		   = {0, 0, 0};
 				closeMouth = true;
@@ -376,22 +386,10 @@ void renderPodcast(Script &script)
 				if (actype == "TWEET")
 				{
 					tweet	   = new Tweet(str);
-					subContent = "|" + tweet->author + "-" + tweet->content + "|";
 				}
 				else if (actype == "ARTICLE")
 				{
 					article = new Article(str);
-				}
-
-				std::this_thread::sleep_for(std::chrono::seconds(3));
-
-				if (tweet != nullptr)
-				{
-					delete tweet;
-				}
-				if (article != nullptr)
-				{
-					delete tweet;
 				}
 
 				return 0;
@@ -417,11 +415,20 @@ void renderPodcast(Script &script)
 
 				closeMouth = false;
 
-				// std::system(("cd tts/result && aplay " + std::to_string(wavIndex) +
-				// ".wav").c_str());
-				std::this_thread::sleep_for(std::chrono::seconds(3));
+				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
 
 				wavIndex++;
+
+				if (tweet != nullptr)
+				{
+					delete tweet;
+					tweet = nullptr;
+				}
+				if (article != nullptr)
+				{
+					delete article;
+					article = nullptr;
+				}
 
 				return 0;
 			});
@@ -434,7 +441,6 @@ void renderPodcast(Script &script)
 		frame += 1;
 		jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
 		jawRotation *= 40;
-		subtitles.setText(subContent);
 
 		event.poll();
 
@@ -446,14 +452,64 @@ void renderPodcast(Script &script)
 
 		window.clear();
 
-		window.getShaderUniforms(shaderScene);
-		shaderScene.use();
-		window.updateMvp(camera);
+		if (tweet != nullptr) // Tweet render
+		{
+			window.getShaderUniforms(shaderUI);
+			shaderUI.use();
+			window.updateMvp(uiCamera);
 
-		window.drawShape(scene);
-		window.drawShape(jaw1);
-		window.drawShape(jaw2);
-		window.drawShape(jaw3);
+			agl::Vec<float, 3> tweetSize	= {1000, 500};
+			agl::Vec<float, 3> tweetPos		= state.size / 2 - tweetSize / 2;
+			agl::Vec<float, 3> tweetPadding = {50, 50};
+			agl::Vec<float, 3> iconSize		= {100, 100};
+			float			   namePadding	= 5;
+
+			rect.setPosition(tweetPos + agl::Vec<float, 3>{0, 0, -1});
+			rect.setSize(tweetSize);
+			rect.setTexture(&blank);
+			window.drawShape(rect);
+
+			rect.setPosition(tweetPos + tweetPadding);
+			rect.setSize(agl::Vec<float, 2>{100, 100});
+			rect.setTexture(&iconDef);
+			window.drawShape(rect);
+
+			text.setPosition(
+				tweetPos + tweetPadding +
+				agl::Vec<float, 2>{iconSize.x + namePadding, iconSize.y / 2 - text.getHeight() - int(namePadding / 2)});
+			text.setText(tweet->author);
+			text.setColor(agl::Color::Black);
+			window.drawText(text);
+
+			text.setPosition(tweetPos + tweetPadding +
+							 agl::Vec<float, 2>{iconSize.x + namePadding, iconSize.y / 2 + int(namePadding / 2)});
+			text.setText("@" + tweet->author);
+			text.setColor(agl::Color::Gray);
+			window.drawText(text);
+
+			text.setFont(&fontLarge);
+			text.setPosition(tweetPos + tweetPadding + agl::Vec<float, 2>{0, iconSize.y + 50});
+			text.setText(tweet->content);
+			text.setColor(agl::Color::Black);
+			window.drawText(text, tweetSize.x - (tweetPadding.x * 2));
+			text.setFont(&font);
+		}
+		else if (article != nullptr) // Article render
+		{
+		}
+		else // Scene render
+		{
+			window.getShaderUniforms(shaderScene);
+			shaderScene.use();
+			window.updateMvp(camera);
+
+			window.drawShape(scene);
+			window.drawShape(jaw1);
+			window.drawShape(jaw2);
+			window.drawShape(jaw3);
+		}
+
+		// Subtitle render
 
 		window.getShaderUniforms(shaderUI);
 		shaderUI.use();
@@ -461,18 +517,20 @@ void renderPodcast(Script &script)
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
-		subtitles.setPosition(state.size);
-		agl::Vec textEnd = window.drawText(subtitles, state.size.x - TEXTPADDING);
+		text.setPosition(state.size);
+		text.setText(subContent);
+		agl::Vec textEnd = window.drawText(text, state.size.x - TEXTPADDING);
 
 		subBack.setSize(state.size);
 
-		subtitles.setPosition({TEXTPADDING, (float)(state.size.y - font.getHeight() - TEXTPADDING) - textEnd.y, 1});
+		text.setColor(agl::Color::White);
+		text.setPosition({TEXTPADDING, (float)(state.size.y - font.getHeight() - TEXTPADDING) - textEnd.y, 1});
 		subBack.setPosition({0, (float)(state.size.y - font.getHeight() - (TEXTPADDING * 2)) - textEnd.y, 0});
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
 		window.drawShape(subBack);
-		window.drawText(subtitles, state.size.x - TEXTPADDING);
+		window.drawText(text, state.size.x - TEXTPADDING);
 		window.display();
 
 		if (!closeMouth)
@@ -561,7 +619,7 @@ int main()
 	{
 		return 0;
 	}
-	renderPodcast(script);
+	render(script);
 
 	exit(0);
 }
