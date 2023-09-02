@@ -385,7 +385,7 @@ void render(Script &script)
 
 				if (actype == "TWEET")
 				{
-					tweet	   = new Tweet(str);
+					tweet = new Tweet(str);
 				}
 				else if (actype == "ARTICLE")
 				{
@@ -458,7 +458,7 @@ void render(Script &script)
 			shaderUI.use();
 			window.updateMvp(uiCamera);
 
-			agl::Vec<float, 3> tweetSize	= {1000, 500};
+			agl::Vec<float, 3> tweetSize	= {900, 500};
 			agl::Vec<float, 3> tweetPos		= state.size / 2 - tweetSize / 2;
 			agl::Vec<float, 3> tweetPadding = {50, 50};
 			agl::Vec<float, 3> iconSize		= {100, 100};
@@ -496,6 +496,34 @@ void render(Script &script)
 		}
 		else if (article != nullptr) // Article render
 		{
+			window.getShaderUniforms(shaderUI);
+			shaderUI.use();
+			window.updateMvp(uiCamera);
+
+			agl::Vec<float, 3> articleSize	  = {900, 250};
+			agl::Vec<float, 3> articlePos	  = state.size / 2 - articleSize / 2;
+			agl::Vec<float, 3> articlePadding = {50, 50};
+			agl::Vec<float, 3> iconSize		  = {100, 100};
+
+			rect.setPosition(articlePos + agl::Vec<float, 3>{0, 0, -1});
+			rect.setSize(articleSize);
+			rect.setTexture(&blank);
+			window.drawShape(rect);
+
+			text.setPosition(articlePos + articlePadding);
+			text.setText(article->title);
+			text.setColor(agl::Color::Black);
+			window.drawText(text);
+
+			text.setPosition(articlePos + articlePadding);
+			text.setText("NewsCorp");
+			text.setColor(agl::Color::Black);
+			window.drawText(text, articleSize.x - (articlePadding.x * 2), agl::Direction::Right);
+
+			text.setPosition(articlePos + articlePadding + agl::Vec<float, 2>{0, 50});
+			text.setText(article->subtext);
+			text.setColor(agl::Color::Black);
+			window.drawText(text, articleSize.x - (articlePadding.x * 2));
 		}
 		else // Scene render
 		{
