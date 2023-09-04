@@ -15,6 +15,21 @@
 
 #define TEXTPADDING 8
 
+// 31.7523d
+
+// 5.68184 m
+//-4.89812 m
+// 5.29282 m
+
+// CAM
+// 7.82274 m
+//-7.14782 m
+// 5.32259 m
+//
+// 86.5994d
+//-0.000018d
+// 48.228d
+
 int genAudio(Script &script)
 {
 	if (std::filesystem::exists("tts/result/0.wav"))
@@ -49,17 +64,9 @@ int genAudio(Script &script)
 
 			std::string voice;
 
-			if (dialogue.name == "Joey")
+			if (dialogue.name == "Smith")
 			{
-				voice = "schlatt";
-			}
-			else if (dialogue.name == "Michael")
-			{
-				voice = "narrator";
-			}
-			else if (dialogue.name == "Andrew")
-			{
-				voice = "joe";
+				voice = "moist";
 			}
 			else
 			{
@@ -184,10 +191,12 @@ void render(Script &script)
 				fragColor = shaderFunc(
 					"vec4",
 					shaderFunc("vec3", .1, .1, .1) +
-						shapeColor * 1.5 *
+						shapeColor * 0.8 *
 							shaderFunc("clamp",
-									   shaderFunc("dot", normal, shaderFunc("vec3", 0.57735, 0.57735, 0.57735)), 0.,
-									   1.),
+									   shaderFunc("dot", shaderFunc("vec3", transform * shaderFunc("vec4", normal, 0)),
+												  shaderFunc("vec3", 0.4685212856658182, 0.6246950475544243,
+															 0.6246950475544243)),
+									   0., 1.),
 					1),																	  //
 																						  //
 				val(val::gl_Position) = mvp * transform * shaderFunc("vec4", position, 1) //
@@ -291,6 +300,10 @@ void render(Script &script)
 
 		for (int i = 0; i < normal.size(); i++)
 		{
+			if (objPath == "assets/jaw.obj")
+			{
+				std::cout << normal[i] << '\n';
+			}
 			normalBufferData[(i * 3) + 0] = normal[i].x;
 			normalBufferData[(i * 3) + 1] = normal[i].y;
 			normalBufferData[(i * 3) + 2] = normal[i].z;
@@ -319,33 +332,20 @@ void render(Script &script)
 	scene.setPosition({0, 0, 0});
 	scene.setSize({1, 1, 1});
 
-	objPath = "assets/j1.obj";
-	agl::Shape jaw1(objToShape);
-	jaw1.setTexture(&sceneTexture);
-	jaw1.setColor(agl::Color::White);
-	jaw1.setPosition({-3.99502, 4.69708, 0.000001});
-	jaw1.setSize({1, 1, 1});
-
-	objPath = "assets/j2.obj";
-	agl::Shape jaw2(objToShape);
-	jaw2.setTexture(&sceneTexture);
-	jaw2.setColor(agl::Color::White);
-	jaw2.setPosition({4.3209, 5.25919, 0});
-	jaw2.setSize({1, 1, 1});
-
-	objPath = "assets/j3.obj";
-	agl::Shape jaw3(objToShape);
-	jaw3.setTexture(&sceneTexture);
-	jaw3.setColor(agl::Color::White);
-	jaw3.setPosition({0, 4.59805, -4.0351});
-	jaw3.setSize({1, 1, 1});
+	objPath = "assets/jaw.obj";
+	agl::Shape jaw(objToShape);
+	jaw.setTexture(&sceneTexture);
+	jaw.setColor(agl::Color::White);
+	jaw.setPosition({5.68184, 5.29282, 4.89812});
+	jaw.setRotation({0, 31.7523 - 64, 0});
+	jaw.setSize({1, 1, 1});
 
 	agl::Rectangle rect;
 	rect.setTexture(&blank);
 	rect.setColor(agl::Color::White);
 
-	agl::Vec<float, 3> pos;
-	agl::Vec<float, 3> rot;
+	agl::Vec<float, 3> pos		   = {-7.82274, -5.32259, -7.14782};
+	agl::Vec<float, 3> rot		   = {0, 48.228, -0.00001};
 	int				   frame	   = 0;
 	float			   jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
 	jawRotation *= 40;
@@ -397,22 +397,6 @@ void render(Script &script)
 			[&](Dialogue &dialogue) -> int {
 				subContent = dialogue.name + ": " + dialogue.content;
 
-				if (dialogue.name == "Joey")
-				{
-					pos = {1.74179, -3.9, -0.727935};
-					rot = {-5, 68, 0};
-				}
-				if (dialogue.name == "Michael")
-				{
-					pos = {-2.93833, -6, -1.66266};
-					rot = {36, -43, 0};
-				}
-				if (dialogue.name == "Andrew")
-				{
-					pos = {0, -4.8, 3.34516};
-					rot = {0, 0, 0};
-				}
-
 				closeMouth = false;
 
 				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
@@ -434,7 +418,7 @@ void render(Script &script)
 			});
 	};
 
-	std::thread scriptThread(threadFunc);
+	// std::thread scriptThread(threadFunc);
 
 	while (!event.windowClose())
 	{
@@ -447,7 +431,7 @@ void render(Script &script)
 		state = window.getState();
 
 		window.setViewport(0, 0, state.size.x, state.size.y);
-		camera.setPerspectiveProjection(90, (float)state.size.x / state.size.y, 0.1, 100);
+		camera.setPerspectiveProjection(49, (float)state.size.x / state.size.y, 0.1, 100);
 		uiCamera.setOrthographicProjection(0, state.size.x, state.size.y, 0, 0.1, 100);
 
 		window.clear();
@@ -531,10 +515,8 @@ void render(Script &script)
 			shaderScene.use();
 			window.updateMvp(camera);
 
+			window.drawShape(jaw);
 			window.drawShape(scene);
-			window.drawShape(jaw1);
-			window.drawShape(jaw2);
-			window.drawShape(jaw3);
 		}
 
 		// Subtitle render
@@ -561,18 +543,13 @@ void render(Script &script)
 		window.drawText(text, state.size.x - TEXTPADDING);
 		window.display();
 
-		if (!closeMouth)
-		{
-			jaw1.setRotation({0, 0, jawRotation});
-			jaw2.setRotation({0, 0, -jawRotation});
-			jaw3.setRotation({jawRotation, 0, 0});
-		}
-		else
-		{
-			jaw1.setRotation({0, 0, 0});
-			jaw2.setRotation({0, 0, 0});
-			jaw3.setRotation({0, 0, 0});
-		}
+		// if (!closeMouth)
+		// {
+		// }
+		// else
+		// {
+		// 	jaw.setRotation({0, 0, 0});
+		// }
 
 		float speedPos = .1;
 		float speedRot = 1;
