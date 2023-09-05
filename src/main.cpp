@@ -364,8 +364,6 @@ void render(Script &script)
 
 		script.loop(
 			[&](Action &action) -> int {
-				pos		   = {0, -4, -4};
-				rot		   = {0, 0, 0};
 				closeMouth = true;
 
 				int			i = 0;
@@ -418,7 +416,7 @@ void render(Script &script)
 			});
 	};
 
-	// std::thread scriptThread(threadFunc);
+	std::thread scriptThread(threadFunc);
 
 	while (!event.windowClose())
 	{
@@ -436,12 +434,41 @@ void render(Script &script)
 
 		window.clear();
 
+		// Scene render
+		window.getShaderUniforms(shaderScene);
+		shaderScene.use();
+		window.updateMvp(camera);
+
+		window.drawShape(jaw);
+		window.drawShape(scene);
+
+		// Subtitle render
+
+		window.getShaderUniforms(shaderUI);
+		shaderUI.use();
+		window.updateMvp(uiCamera);
+
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		text.setPosition(state.size);
+		text.setText(subContent);
+		agl::Vec textEnd = window.drawText(text, state.size.x - TEXTPADDING);
+
+		subBack.setSize(state.size);
+
+		text.setColor(agl::Color::White);
+		text.setPosition({TEXTPADDING, (float)(state.size.y - font.getHeight() - TEXTPADDING) - textEnd.y, 1});
+		subBack.setPosition({0, (float)(state.size.y - font.getHeight() - (TEXTPADDING * 2)) - textEnd.y, 0});
+
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		window.drawShape(subBack);
+		window.drawText(text, state.size.x - TEXTPADDING);
+		
+		glClear(GL_DEPTH_BUFFER_BIT);
+
 		if (tweet != nullptr) // Tweet render
 		{
-			window.getShaderUniforms(shaderUI);
-			shaderUI.use();
-			window.updateMvp(uiCamera);
-
 			agl::Vec<float, 3> tweetSize	= {900, 500};
 			agl::Vec<float, 3> tweetPos		= state.size / 2 - tweetSize / 2;
 			agl::Vec<float, 3> tweetPadding = {50, 50};
@@ -480,10 +507,6 @@ void render(Script &script)
 		}
 		else if (article != nullptr) // Article render
 		{
-			window.getShaderUniforms(shaderUI);
-			shaderUI.use();
-			window.updateMvp(uiCamera);
-
 			agl::Vec<float, 3> articleSize	  = {900, 250};
 			agl::Vec<float, 3> articlePos	  = state.size / 2 - articleSize / 2;
 			agl::Vec<float, 3> articlePadding = {50, 50};
@@ -509,47 +532,23 @@ void render(Script &script)
 			text.setColor(agl::Color::Black);
 			window.drawText(text, articleSize.x - (articlePadding.x * 2));
 		}
-		else // Scene render
-		{
-			window.getShaderUniforms(shaderScene);
-			shaderScene.use();
-			window.updateMvp(camera);
 
-			window.drawShape(jaw);
-			window.drawShape(scene);
-		}
-
-		// Subtitle render
-
-		window.getShaderUniforms(shaderUI);
-		shaderUI.use();
-		window.updateMvp(uiCamera);
-
-		glClear(GL_DEPTH_BUFFER_BIT);
-
-		text.setPosition(state.size);
-		text.setText(subContent);
-		agl::Vec textEnd = window.drawText(text, state.size.x - TEXTPADDING);
-
-		subBack.setSize(state.size);
-
-		text.setColor(agl::Color::White);
-		text.setPosition({TEXTPADDING, (float)(state.size.y - font.getHeight() - TEXTPADDING) - textEnd.y, 1});
-		subBack.setPosition({0, (float)(state.size.y - font.getHeight() - (TEXTPADDING * 2)) - textEnd.y, 0});
-
-		glClear(GL_DEPTH_BUFFER_BIT);
-
-		window.drawShape(subBack);
-		window.drawText(text, state.size.x - TEXTPADDING);
 		window.display();
 
-		// if (!closeMouth)
-		// {
-		// }
-		// else
-		// {
-		// 	jaw.setRotation({0, 0, 0});
-		// }
+		if (closeMouth)
+		{
+			jaw.setRotation({0, 31.7523 - 64, 0});
+		}
+		else
+		{
+			long		pshape = (long)&jaw;
+			agl::Mat4f *rotMat = (agl::Mat4f *)(pshape + 388);
+			agl::Mat4f	mat1;
+			mat1.rotate({0, 31.7523 - 64, 0});
+			agl::Mat4f mat2;
+			mat2.rotate({jawRotation, 0, 0});
+			*rotMat = mat1 * mat2;
+		}
 
 		float speedPos = .1;
 		float speedRot = 1;
