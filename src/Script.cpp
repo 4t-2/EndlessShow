@@ -1,47 +1,16 @@
 #include "../inc/Script.hpp"
+#include <iostream>
 
-Action::Action(std::string &line)
+void Element::print()
 {
-	action = line.substr(1, line.length() - 2);
-}
-
-void Action::print()
-{
-	printf("[%s]\n", action.c_str());
-}
-
-Dialogue::Dialogue(std::string &line)
-{
-	std::string *p = &name;
-
-	for (char &c : line)
+	std::cout << type;
+	
+	for(std::string &arg: arg)
 	{
-		if (c != ':')
-		{
-			*p += c;
-		}
-		else
-		{
-			p = &content;
-		}
+		std::cout << " \"" << arg << "\"";
 	}
-}
 
-void Dialogue::print()
-{
-	printf("%s: %s\n", name.c_str(), content.c_str());
-}
-
-Sequence::~Sequence()
-{
-	if (type == DialogueT)
-	{
-		delete (Dialogue *)element;
-	}
-	if (type == ActionT)
-	{
-		delete (Action *)element;
-	}
+	std::cout << '\n';
 }
 
 void splitNewline(std::fstream &fs, std::vector<std::string> &vec)
@@ -62,52 +31,57 @@ Script::Script(std::fstream &fs)
 
 	splitNewline(fs, vector);
 
-	title = vector[0].substr(1, vector[0].length() - 2);
-
-	length	 = vector.size() - 1;
-	sequence = new Sequence[length];
-
-	for (int i = 0; i < vector.size() - 1; i++)
+	for (std::string &line : vector)
 	{
-		std::string &line = vector[i + 1];
+		element.emplace_back();
+		Element &last = element[element.size()-1];
+		int		x;
 
-		if (line[0] == '[')
+		for (x = 0; x < line.length(); x++)
 		{
-			sequence[i].type	= ElementType::ActionT;
-			sequence[i].element = new Action(line);
+			if (line[x] == ' ')
+			{
+				x++;
+				break;
+			}
+
+			last.type += line[x];
 		}
-		else
+
+		for (; x < line.length(); x++)
 		{
-			sequence[i].type	= ElementType::DialogueT;
-			sequence[i].element = new Dialogue(line);
+			if (line[x] == '"')
+			{
+				last.arg.emplace_back("");
+				x++;
+
+				for (; x < line.length(); x++)
+				{
+					if (line[x] == '"')
+					{
+						break;
+					}
+
+					last.arg[last.arg.size() - 1] += line[x];
+				}
+			}
 		}
 	}
 }
 
 Script::~Script()
 {
-	delete[] sequence;
 }
 
-void Script::loop(std::function<int(Action &action)> actionFunc, std::function<int(Dialogue &dialogue)> dialogueFunc)
+void Script::loop(std::function<int(Element &element)> func)
 {
-	printf("%s\n", title.c_str());
 	int code = 0;
 
-	for (int i = 0; i < length; i++)
+	for (Element &element : element)
 	{
-		if (sequence[i].type == ActionT)
-		{
-			Action *p = (Action *)(sequence[i].element);
-			code = actionFunc(*p);
-		}
-		if (sequence[i].type == DialogueT)
-		{
-			Dialogue *p = (Dialogue *)(sequence[i].element);
-			code = dialogueFunc(*p);
-		}
+		code = func(element);
 
-		if(code)
+		if (code)
 		{
 			return;
 		}

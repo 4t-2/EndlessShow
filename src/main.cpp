@@ -30,6 +30,45 @@
 //-0.000018d
 // 48.228d
 
+class Dialogue
+{
+	public:
+		std::string name;
+		std::string content;
+
+		Dialogue(Element &element)
+		{
+			name	= element.arg[0];
+			content = element.arg[1];
+		}
+};
+
+class Tweet
+{
+	public:
+		std::string author;
+		std::string content;
+
+		Tweet(Element &element)
+		{
+			author	= element.arg[0];
+			content = element.arg[1];
+		}
+};
+
+class Article
+{
+	public:
+		std::string title;
+		std::string subtext;
+
+		Article(Element &element)
+		{
+			title	= element.arg[0];
+			subtext = element.arg[1];
+		}
+};
+
 int genAudio(Script &script)
 {
 	if (std::filesystem::exists("tts/result/0.wav"))
@@ -41,13 +80,12 @@ int genAudio(Script &script)
 
 	int wavIndex = 0;
 
-	script.loop(
-		[](Action &action) -> int {
-			action.print();
-			return 0;
-		},
-		[&](Dialogue &dialogue) -> int {
-			dialogue.print();
+	script.loop([&](Element &element) -> int {
+		element.print();
+
+		if (element.type == "DIALOGUE")
+		{
+			Dialogue dialogue(element);
 
 			std::string msg = dialogue.content;
 
@@ -81,62 +119,13 @@ int genAudio(Script &script)
 			std::system(cmd.c_str());
 
 			wavIndex++;
+		}
 
-			return 0;
-		});
+		return 0;
+	});
 
-	return 1;
+	return 0;
 }
-
-class Tweet
-{
-	public:
-		std::string author;
-		std::string content;
-
-		Tweet(std::string &line)
-		{
-			std::string *p = &author;
-
-			for (int i = 0; i < line.length(); i++)
-			{
-				char &c = line[i];
-
-				if (c != ':')
-				{
-					*p += c;
-				}
-				else
-				{
-					p = &content;
-					i++;
-				}
-			}
-		}
-};
-
-class Article
-{
-	public:
-		Article(std::string &line)
-		{
-			std::string *p = &title;
-
-			for (char &c : line)
-			{
-				if (c != ':')
-				{
-					*p += c;
-				}
-				else
-				{
-					p = &subtext;
-				}
-			}
-		}
-		std::string title;
-		std::string subtext;
-};
 
 template <typename T> class ThreadSafe
 {
@@ -190,7 +179,7 @@ void render(Script &script)
 																													 //
 				fragColor = shaderFunc(
 					"vec4",
-					shaderFunc("vec3", .1, .1, .1) +
+					shaderFunc("vec3", .15, .15, .15) +
 						shapeColor * 0.8 *
 							shaderFunc("clamp",
 									   shaderFunc("dot", shaderFunc("vec3", transform * shaderFunc("vec4", normal, 0)),
@@ -362,37 +351,20 @@ void render(Script &script)
 	auto threadFunc = [&]() {
 		int wavIndex = 0;
 
-		script.loop(
-			[&](Action &action) -> int {
-				closeMouth = true;
+		script.loop([&](Element &element) -> int {
+			closeMouth = true;
+			if (element.type == "TWEET")
+			{
+				tweet = new Tweet(element);
+			}
+			else if (element.type == "ARTICLE")
+			{
+				article = new Article(element);
+			}
+			else if (element.type == "DIALOGUE")
+			{
+				Dialogue dialogue(element);
 
-				int			i = 0;
-				std::string actype;
-
-				for (i = 0; i < action.action.length(); i++)
-				{
-					if (action.action[i] == ' ')
-					{
-						i++;
-						break;
-					}
-					actype += action.action[i];
-				}
-
-				std::string str = action.action.substr(i, action.action.length() - i);
-
-				if (actype == "TWEET")
-				{
-					tweet = new Tweet(str);
-				}
-				else if (actype == "ARTICLE")
-				{
-					article = new Article(str);
-				}
-
-				return 0;
-			},
-			[&](Dialogue &dialogue) -> int {
 				subContent = dialogue.name + ": " + dialogue.content;
 
 				closeMouth = false;
@@ -411,9 +383,10 @@ void render(Script &script)
 					delete article;
 					article = nullptr;
 				}
+			}
 
-				return 0;
-			});
+			return 0;
+		});
 	};
 
 	std::thread scriptThread(threadFunc);
@@ -464,7 +437,7 @@ void render(Script &script)
 
 		window.drawShape(subBack);
 		window.drawText(text, state.size.x - TEXTPADDING);
-		
+
 		glClear(GL_DEPTH_BUFFER_BIT);
 
 		if (tweet != nullptr) // Tweet render
