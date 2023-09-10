@@ -30,42 +30,87 @@
 //-0.000018d
 // 48.228d
 
+using std::cout;
+
+class Room {
+public:
+  agl::Vec<int, 2> size;
+
+  Room(Element &element) {
+    size.x = std::stoi(element.arg[0]);
+    size.x = std::stoi(element.arg[1]);
+  }
+};
+
+class Actor
+{
+	public:
+		std::string		 name;
+		std::string		 voice;
+		agl::Color		 shirtColour;
+		agl::Vec<int, 2> pos;
+
+		Actor(Element &element)
+		{
+			name = element.arg[0];
+
+			voice = element.arg[1];
+
+			if (element.arg[2] == "RED")
+			{
+				shirtColour = agl::Color::Red;
+			}
+			else if (element.arg[2] == "GREEN")
+			{
+				shirtColour = agl::Color::Green;
+			}
+			else if (element.arg[2] == "BLUE")
+			{
+				shirtColour = agl::Color::Blue;
+			}
+			else if (element.arg[2] == "CYAN")
+			{
+				shirtColour = agl::Color::Cyan;
+			}
+			else if (element.arg[2] == "MAGENTA")
+			{
+				shirtColour = agl::Color::Magenta;
+			}
+			else if (element.arg[2] == "YELLOW")
+			{
+				shirtColour = agl::Color::Yellow;
+			}
+
+			pos.x = std::stoi(element.arg[3]);
+			pos.y = std::stoi(element.arg[4]);
+		}
+};
+
 class Dialogue
 {
 	public:
-		std::string name;
+		Actor	   *name = nullptr;
 		std::string content;
 
-		Dialogue(Element &element)
+		Dialogue(Element &element, std::vector<Actor> &actor)
 		{
-			name	= element.arg[0];
+			std::cout << "LIST" << '\n';
+			for (Actor &actor : actor)
+			{
+				std::cout << "ACTOR " << actor.name << '\n';
+				if (actor.name == element.arg[0])
+				{
+					name = &actor;
+				}
+			}
+
+			if (name == nullptr)
+			{
+				std::cout << "ERROR: Dialogue name is " + element.arg[0] + " but can't be found in actor list";
+				exit(1);
+			}
+
 			content = element.arg[1];
-		}
-};
-
-class Tweet
-{
-	public:
-		std::string author;
-		std::string content;
-
-		Tweet(Element &element)
-		{
-			author	= element.arg[0];
-			content = element.arg[1];
-		}
-};
-
-class Article
-{
-	public:
-		std::string title;
-		std::string subtext;
-
-		Article(Element &element)
-		{
-			title	= element.arg[0];
-			subtext = element.arg[1];
 		}
 };
 
@@ -80,12 +125,19 @@ int genAudio(Script &script)
 
 	int wavIndex = 0;
 
+	std::vector<Actor> actor;
+
 	script.loop([&](Element &element) -> int {
 		element.print();
 
+		if (element.type == "ACTOR")
+		{
+			actor.emplace_back(element);
+		}
+
 		if (element.type == "DIALOGUE")
 		{
-			Dialogue dialogue(element);
+			Dialogue dialogue(element, actor);
 
 			std::string msg = dialogue.content;
 
@@ -102,14 +154,7 @@ int genAudio(Script &script)
 
 			std::string voice;
 
-			if (dialogue.name == "Smith")
-			{
-				voice = "moist";
-			}
-			else
-			{
-				return 1;
-			}
+			voice = dialogue.name->voice;
 
 			std::string cmd =
 				"cd tts && python3 tts.py " + safeStr(msg) + " " + voice + " " + std::to_string(wavIndex) + ".wav";
@@ -134,11 +179,11 @@ template <typename T> class ThreadSafe
 		std::mutex mx;
 
 	public:
-		void use(std::function<void(T &t)> func)
+		void use(std::function<void(T *t)> func)
 		{
 			mx.lock();
 
-			func(t);
+			func(&t);
 
 			mx.unlock();
 		}
@@ -289,10 +334,6 @@ void render(Script &script)
 
 		for (int i = 0; i < normal.size(); i++)
 		{
-			if (objPath == "assets/jaw.obj")
-			{
-				std::cout << normal[i] << '\n';
-			}
 			normalBufferData[(i * 3) + 0] = normal[i].x;
 			normalBufferData[(i * 3) + 1] = normal[i].y;
 			normalBufferData[(i * 3) + 2] = normal[i].z;
@@ -338,10 +379,9 @@ void render(Script &script)
 	int				   frame	   = 0;
 	float			   jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
 	jawRotation *= 40;
-	bool		closeMouth = false;
-	std::string subContent = "";
-	Tweet	   *tweet	   = nullptr;
-	Article	   *article	   = nullptr;
+	bool						   closeMouth = false;
+	std::string					   subContent = "";
+	ThreadSafe<std::vector<Actor>> actor;
 
 	while (!event.isKeyPressed(agl::Key::Return))
 	{
@@ -353,36 +393,30 @@ void render(Script &script)
 
 		script.loop([&](Element &element) -> int {
 			closeMouth = true;
-			if (element.type == "TWEET")
+			if (element.type == "ACTOR")
 			{
-				tweet = new Tweet(element);
-			}
-			else if (element.type == "ARTICLE")
-			{
-				article = new Article(element);
-			}
-			else if (element.type == "DIALOGUE")
-			{
-				Dialogue dialogue(element);
+				actor.use([&](std::vector<Actor>*actor) {
+					actor->push_back(element);
+                                        cout << (*actor)[0].name << '\n';
+				});
 
-				subContent = dialogue.name + ": " + dialogue.content;
+				actor.use([&](std::vector<Actor>*actor) {
+                                        cout << (*actor)[0].name << '\n';
+				});
+			}
+			if (element.type == "DIALOGUE")
+			{
+				actor.use([&](auto actor) {
+					Dialogue dialogue(element, *actor);
+
+					subContent = dialogue.name->name + ": " + dialogue.content;
+				});
 
 				closeMouth = false;
 
 				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
 
 				wavIndex++;
-
-				if (tweet != nullptr)
-				{
-					delete tweet;
-					tweet = nullptr;
-				}
-				if (article != nullptr)
-				{
-					delete article;
-					article = nullptr;
-				}
 			}
 
 			return 0;
@@ -437,74 +471,6 @@ void render(Script &script)
 
 		window.drawShape(subBack);
 		window.drawText(text, state.size.x - TEXTPADDING);
-
-		glClear(GL_DEPTH_BUFFER_BIT);
-
-		if (tweet != nullptr) // Tweet render
-		{
-			agl::Vec<float, 3> tweetSize	= {900, 500};
-			agl::Vec<float, 3> tweetPos		= state.size / 2 - tweetSize / 2;
-			agl::Vec<float, 3> tweetPadding = {50, 50};
-			agl::Vec<float, 3> iconSize		= {100, 100};
-			float			   namePadding	= 5;
-
-			rect.setPosition(tweetPos + agl::Vec<float, 3>{0, 0, -1});
-			rect.setSize(tweetSize);
-			rect.setTexture(&blank);
-			window.drawShape(rect);
-
-			rect.setPosition(tweetPos + tweetPadding);
-			rect.setSize(agl::Vec<float, 2>{100, 100});
-			rect.setTexture(&iconDef);
-			window.drawShape(rect);
-
-			text.setPosition(
-				tweetPos + tweetPadding +
-				agl::Vec<float, 2>{iconSize.x + namePadding, iconSize.y / 2 - text.getHeight() - int(namePadding / 2)});
-			text.setText(tweet->author);
-			text.setColor(agl::Color::Black);
-			window.drawText(text);
-
-			text.setPosition(tweetPos + tweetPadding +
-							 agl::Vec<float, 2>{iconSize.x + namePadding, iconSize.y / 2 + int(namePadding / 2)});
-			text.setText("@" + tweet->author);
-			text.setColor(agl::Color::Gray);
-			window.drawText(text);
-
-			text.setFont(&fontLarge);
-			text.setPosition(tweetPos + tweetPadding + agl::Vec<float, 2>{0, iconSize.y + 50});
-			text.setText(tweet->content);
-			text.setColor(agl::Color::Black);
-			window.drawText(text, tweetSize.x - (tweetPadding.x * 2));
-			text.setFont(&font);
-		}
-		else if (article != nullptr) // Article render
-		{
-			agl::Vec<float, 3> articleSize	  = {900, 250};
-			agl::Vec<float, 3> articlePos	  = state.size / 2 - articleSize / 2;
-			agl::Vec<float, 3> articlePadding = {50, 50};
-			agl::Vec<float, 3> iconSize		  = {100, 100};
-
-			rect.setPosition(articlePos + agl::Vec<float, 3>{0, 0, -1});
-			rect.setSize(articleSize);
-			rect.setTexture(&blank);
-			window.drawShape(rect);
-
-			text.setPosition(articlePos + articlePadding);
-			text.setText(article->title);
-			text.setColor(agl::Color::Black);
-			window.drawText(text);
-
-			text.setPosition(articlePos + articlePadding);
-			text.setText("NewsCorp");
-			text.setColor(agl::Color::Black);
-			window.drawText(text, articleSize.x - (articlePadding.x * 2), agl::Direction::Right);
-
-			text.setPosition(articlePos + articlePadding + agl::Vec<float, 2>{0, 50});
-			text.setText(article->subtext);
-			text.setColor(agl::Color::Black);
-			window.drawText(text, articleSize.x - (articlePadding.x * 2));
-		}
 
 		window.display();
 
