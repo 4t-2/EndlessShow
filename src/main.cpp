@@ -15,31 +15,46 @@
 
 #define TEXTPADDING 8
 
-// 31.7523d
+// Z 0.08442 m
+// Y 1.55272 m
 
-// 5.68184 m
-//-4.89812 m
-// 5.29282 m
+class Room
+{
+	public:
+		agl::Vec<int, 2> size;
 
-// CAM
-// 7.82274 m
-//-7.14782 m
-// 5.32259 m
-//
-// 86.5994d
-//-0.000018d
-// 48.228d
+		Room()
+		{
+		}
+		Room(Element &element)
+		{
+			size.x = std::stoi(element.arg[0]);
+			size.y = std::stoi(element.arg[1]);
+		}
+};
 
-using std::cout;
+class Block
+{
+	public:
+		agl::Vec<int, 2> pos;
 
-class Room {
-public:
-  agl::Vec<int, 2> size;
+		Block(Element &element)
+		{
+			pos.x = std::stoi(element.arg[0]);
+			pos.y = std::stoi(element.arg[1]);
+		}
+};
 
-  Room(Element &element) {
-    size.x = std::stoi(element.arg[0]);
-    size.x = std::stoi(element.arg[1]);
-  }
+class Chair
+{
+	public:
+		agl::Vec<int, 2> pos;
+
+		Chair(Element &element)
+		{
+			pos.x = std::stoi(element.arg[0]);
+			pos.y = std::stoi(element.arg[1]);
+		}
 };
 
 class Actor
@@ -48,6 +63,7 @@ class Actor
 		std::string		 name;
 		std::string		 voice;
 		agl::Color		 shirtColour;
+		agl::Shape		*shape;
 		agl::Vec<int, 2> pos;
 
 		Actor(Element &element)
@@ -94,10 +110,8 @@ class Dialogue
 
 		Dialogue(Element &element, std::vector<Actor> &actor)
 		{
-			std::cout << "LIST" << '\n';
 			for (Actor &actor : actor)
 			{
-				std::cout << "ACTOR " << actor.name << '\n';
 				if (actor.name == element.arg[0])
 				{
 					name = &actor;
@@ -155,6 +169,31 @@ int genAudio(Script &script)
 			std::string voice;
 
 			voice = dialogue.name->voice;
+
+			if (voice == "1")
+			{
+				voice = "joe";
+			}
+			else if (voice == "2")
+			{
+				voice = "moist";
+			}
+			else if (voice == "3")
+			{
+				voice = "narrator";
+			}
+			else if (voice == "4")
+			{
+				voice = "schlatt";
+			}
+			else if (voice == "5")
+			{
+				voice = "tom";
+			}
+			else if (voice == "6")
+			{
+				voice = "tiktok";
+			}
 
 			std::string cmd =
 				"cd tts && python3 tts.py " + safeStr(msg) + " " + voice + " " + std::to_string(wavIndex) + ".wav";
@@ -312,7 +351,7 @@ void render(Script &script)
 	text.setColor(agl::Color::White);
 	text.setText("");
 
-	std::string objPath = "assets/scene.obj";
+	std::string objPath;
 
 	auto objToShape = [&](agl::Shape &shape) {
 		std::vector<agl::Vec<float, 3>> vertex;
@@ -356,37 +395,56 @@ void render(Script &script)
 		delete[] UVBufferData;
 	};
 
-	agl::Shape scene(objToShape);
-	scene.setTexture(&sceneTexture);
-	scene.setColor(agl::Color::White);
-	scene.setPosition({0, 0, 0});
-	scene.setSize({1, 1, 1});
+	objPath = "assets/humanbase.obj";
+	agl::Shape humanBase(objToShape);
+	humanBase.setTexture(&sceneTexture);
+	humanBase.setColor(agl::Color::White);
+	humanBase.setPosition({0, 0, 0});
+	humanBase.setSize({1, 1, 1});
+
+	objPath = "assets/humantpose.obj";
+	agl::Shape humanTpose(objToShape);
+	humanTpose.setTexture(&sceneTexture);
+	humanTpose.setColor(agl::Color::White);
+	humanTpose.setPosition({0, 0, 0});
+	humanTpose.setSize({1, 1, 1});
+
+	objPath = "assets/humanstand.obj";
+	agl::Shape humanStand(objToShape);
+	humanStand.setTexture(&sceneTexture);
+	humanStand.setColor(agl::Color::White);
+	humanStand.setPosition({0, 0, 0});
+	humanStand.setSize({1, 1, 1});
 
 	objPath = "assets/jaw.obj";
 	agl::Shape jaw(objToShape);
 	jaw.setTexture(&sceneTexture);
 	jaw.setColor(agl::Color::White);
-	jaw.setPosition({5.68184, 5.29282, 4.89812});
-	jaw.setRotation({0, 31.7523 - 64, 0});
+	jaw.setPosition({0, 0, 0});
 	jaw.setSize({1, 1, 1});
 
 	agl::Rectangle rect;
 	rect.setTexture(&blank);
 	rect.setColor(agl::Color::White);
 
-	agl::Vec<float, 3> pos		   = {-7.82274, -5.32259, -7.14782};
-	agl::Vec<float, 3> rot		   = {0, 48.228, -0.00001};
+	agl::Vec<float, 3> pos		   = {0, 0, 0};
+	agl::Vec<float, 3> rot		   = {0, 0, 0};
 	int				   frame	   = 0;
 	float			   jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
 	jawRotation *= 40;
 	bool						   closeMouth = false;
 	std::string					   subContent = "";
 	ThreadSafe<std::vector<Actor>> actor;
+	ThreadSafe<std::vector<Block>> block;
+	ThreadSafe<std::vector<Chair>> chair;
+	ThreadSafe<Room>			   room;
 
 	while (!event.isKeyPressed(agl::Key::Return))
 	{
 		event.poll();
 	}
+
+	srand(0);
 
 	auto threadFunc = [&]() {
 		int wavIndex = 0;
@@ -395,13 +453,23 @@ void render(Script &script)
 			closeMouth = true;
 			if (element.type == "ACTOR")
 			{
-				actor.use([&](std::vector<Actor>*actor) {
+				actor.use([&](std::vector<Actor> *actor) {
 					actor->push_back(element);
-                                        cout << (*actor)[0].name << '\n';
-				});
 
-				actor.use([&](std::vector<Actor>*actor) {
-                                        cout << (*actor)[0].name << '\n';
+					float choice = ((float)rand() / (float)RAND_MAX);
+
+					if (choice >= (2. / 3))
+					{
+						(*actor)[actor->size() - 1].shape = &humanBase;
+					}
+					else if (choice >= (1. / 3))
+					{
+						(*actor)[actor->size() - 1].shape = &humanTpose;
+					}
+					else if (choice >= (0. / 3))
+					{
+						(*actor)[actor->size() - 1].shape = &humanStand;
+					}
 				});
 			}
 			if (element.type == "DIALOGUE")
@@ -414,9 +482,22 @@ void render(Script &script)
 
 				closeMouth = false;
 
-				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
+				// std::system(("cd tts/result && aplay " + std::to_string(wavIndex) +
+				// ".wav").c_str());
 
 				wavIndex++;
+			}
+			if (element.type == "ROOM")
+			{
+				room.use([&](Room *room) { *room = Room(element); });
+			}
+			if (element.type == "BLOCK")
+			{
+				block.use([&](std::vector<Block> *block) { block->push_back(element); });
+			}
+			if (element.type == "CHAIR")
+			{
+				chair.use([&](std::vector<Chair> *chair) { chair->push_back(element); });
 			}
 
 			return 0;
@@ -446,8 +527,33 @@ void render(Script &script)
 		shaderScene.use();
 		window.updateMvp(camera);
 
-		window.drawShape(jaw);
-		window.drawShape(scene);
+		// Draw room
+		rect.setOffset({0, 0, 0});
+		rect.setPosition({0, 0, 0});
+		room.use([&](Room *room) { rect.setSize(room->size); });
+		rect.setColor(agl::Color::Gray);
+		rect.setRotation({-90, 0, 90});
+
+		window.drawShape(rect);
+
+		static float mouthRot = 0;
+
+		// draw actors
+		actor.use([&](std::vector<Actor> *actor) {
+			for (Actor actor : *actor)
+			{
+				agl::Shape &shape = *actor.shape;
+				shape.setPosition({(float)actor.pos.x, 0, (float)actor.pos.y});
+				window.drawShape(*actor.shape);
+
+				jaw.setPosition(shape.getPosition() + agl::Vec<float, 3>{0, 1.55272, 0.08442});
+				jaw.setRotation({mouthRot, 0, 0});
+
+				window.drawShape(jaw);
+			}
+		});
+
+		mouthRot++;
 
 		// Subtitle render
 
@@ -474,20 +580,20 @@ void render(Script &script)
 
 		window.display();
 
-		if (closeMouth)
-		{
-			jaw.setRotation({0, 31.7523 - 64, 0});
-		}
-		else
-		{
-			long		pshape = (long)&jaw;
-			agl::Mat4f *rotMat = (agl::Mat4f *)(pshape + 388);
-			agl::Mat4f	mat1;
-			mat1.rotate({0, 31.7523 - 64, 0});
-			agl::Mat4f mat2;
-			mat2.rotate({jawRotation, 0, 0});
-			*rotMat = mat1 * mat2;
-		}
+		// if (closeMouth)
+		// {
+		// 	jaw.setRotation({0, 31.7523 - 64, 0});
+		// }
+		// else
+		// {
+		// 	long		pshape = (long)&jaw;
+		// 	agl::Mat4f *rotMat = (agl::Mat4f *)(pshape + 388);
+		// 	agl::Mat4f	mat1;
+		// 	mat1.rotate({0, 31.7523 - 64, 0});
+		// 	agl::Mat4f mat2;
+		// 	mat2.rotate({jawRotation, 0, 0});
+		// 	*rotMat = mat1 * mat2;
+		// }
 
 		float speedPos = .1;
 		float speedRot = 1;

@@ -33,6 +33,11 @@ Script::Script(std::fstream &fs)
 
 	for (std::string &line : vector)
 	{
+		if(line[0] == '#')
+		{
+			continue;
+		}
+
 		element.emplace_back();
 		Element &last = element[element.size()-1];
 		int		x;
