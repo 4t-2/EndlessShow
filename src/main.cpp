@@ -14,6 +14,7 @@
 #include <vector>
 
 #define TEXTPADDING 8
+#define HUMANSCALE	1.5
 
 // Z 0.08442 m
 // Y 1.55272 m
@@ -74,27 +75,27 @@ class Actor
 
 			if (element.arg[2] == "RED")
 			{
-				shirtColour = agl::Color::Red;
+				shirtColour = {255, 127, 127};
 			}
 			else if (element.arg[2] == "GREEN")
 			{
-				shirtColour = agl::Color::Green;
+				shirtColour = {127, 255, 127};
 			}
 			else if (element.arg[2] == "BLUE")
 			{
-				shirtColour = agl::Color::Blue;
+				shirtColour = {127, 127, 255};
 			}
 			else if (element.arg[2] == "CYAN")
 			{
-				shirtColour = agl::Color::Cyan;
+				shirtColour = {127, 255, 255};
 			}
 			else if (element.arg[2] == "MAGENTA")
 			{
-				shirtColour = agl::Color::Magenta;
+				shirtColour = {255, 127, 255};
 			}
 			else if (element.arg[2] == "YELLOW")
 			{
-				shirtColour = agl::Color::Yellow;
+				shirtColour = {255, 255, 127};
 			}
 
 			pos.x = std::stoi(element.arg[3]);
@@ -427,13 +428,18 @@ void render(Script &script)
 	rect.setTexture(&blank);
 	rect.setColor(agl::Color::White);
 
+	agl::Cuboid cube;
+	cube.setTexture(&blank);
+	cube.setColor(agl::Color::White);
+	cube.setSize({1, 1, 1});
+
 	agl::Vec<float, 3> pos		   = {0, 0, 0};
 	agl::Vec<float, 3> rot		   = {0, 0, 0};
 	int				   frame	   = 0;
 	float			   jawRotation = std::sin(agl::degreeToRadian(frame * 12)) / 2 + .5;
 	jawRotation *= 40;
-	bool						   closeMouth = false;
-	std::string					   subContent = "";
+	ThreadSafe<std::string>		   subContent;
+	Dialogue					  *dialogue = nullptr;
 	ThreadSafe<std::vector<Actor>> actor;
 	ThreadSafe<std::vector<Block>> block;
 	ThreadSafe<std::vector<Chair>> chair;
@@ -450,7 +456,6 @@ void render(Script &script)
 		int wavIndex = 0;
 
 		script.loop([&](Element &element) -> int {
-			closeMouth = true;
 			if (element.type == "ACTOR")
 			{
 				actor.use([&](std::vector<Actor> *actor) {
@@ -472,18 +477,38 @@ void render(Script &script)
 					}
 				});
 			}
+			if (element.type == "BLOCK")
+			{
+				block.use([&](std::vector<Block> *block) { block->push_back(element); });
+			}
 			if (element.type == "DIALOGUE")
 			{
 				actor.use([&](auto actor) {
-					Dialogue dialogue(element, *actor);
+					dialogue = new Dialogue(element, *actor);
 
-					subContent = dialogue.name->name + ": " + dialogue.content;
+					subContent.use([&](std::string *subContent) {
+						*subContent = dialogue->name->name + ": " + dialogue->content;
+					});
 				});
 
-				closeMouth = false;
+				room.use([&](Room *room) {
+					pos.x = dialogue->name->pos.x + 3;
+					pos.y = 2.25;
+					pos.z = dialogue->name->pos.y + 3;
+				});
+
+				agl::Vec<float, 3> target;
+				target.x = dialogue->name->pos.x;
+				target.y = 2.25;
+				target.z = dialogue->name->pos.y;
+
+				camera.setView(pos, target, {0, 1, 0});
 
 				// std::system(("cd tts/result && aplay " + std::to_string(wavIndex) +
 				// ".wav").c_str());
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+				delete dialogue;
 
 				wavIndex++;
 			}
@@ -536,24 +561,41 @@ void render(Script &script)
 
 		window.drawShape(rect);
 
-		static float mouthRot = 0;
-
 		// draw actors
 		actor.use([&](std::vector<Actor> *actor) {
 			for (Actor actor : *actor)
 			{
 				agl::Shape &shape = *actor.shape;
-				shape.setPosition({(float)actor.pos.x, 0, (float)actor.pos.y});
+				shape.setPosition({(float)actor.pos.x + (float).5, 0, (float)actor.pos.y + (float).5});
+				shape.setColor(actor.shirtColour);
+				shape.setSize({HUMANSCALE, HUMANSCALE, HUMANSCALE});
 				window.drawShape(*actor.shape);
 
-				jaw.setPosition(shape.getPosition() + agl::Vec<float, 3>{0, 1.55272, 0.08442});
-				jaw.setRotation({mouthRot, 0, 0});
+				jaw.setPosition(shape.getPosition() + agl::Vec<float, 3>{0, 1.55272, 0.08442} * HUMANSCALE);
+				jaw.setSize(shape.getSize());
+				jaw.setColor(actor.shirtColour);
+
+				if (dialogue->name->name == actor.name)
+				{
+					jaw.setRotation({jawRotation, 0, 0});
+				}
+				else
+				{
+					jaw.setRotation({0, 0, 0});
+				}
 
 				window.drawShape(jaw);
 			}
 		});
 
-		mouthRot++;
+		// draw blocks
+		block.use([&](std::vector<Block> *block) {
+			for (Block block : *block)
+			{
+				cube.setPosition({(float)block.pos.x, 0, (float)block.pos.y});
+				window.drawShape(cube);
+			}
+		});
 
 		// Subtitle render
 
@@ -563,10 +605,10 @@ void render(Script &script)
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 
+		text.setScale(1);
 		text.setPosition(state.size);
-		text.setText(subContent);
+		subContent.use([&](std::string *subContent) { text.setText(*subContent); });
 		agl::Vec textEnd = window.drawText(text, state.size.x - TEXTPADDING);
-
 		subBack.setSize(state.size);
 
 		text.setColor(agl::Color::White);
@@ -644,15 +686,38 @@ void render(Script &script)
 			rot.y -= speedRot;
 		}
 
-		agl::Mat4f &view = *(agl::Mat4f *)(long(&camera) + 64);
+		bool tabToggle = false;
+		bool freecam   = false;
 
-		agl::Mat4f rotate;
-		agl::Mat4f translate;
+		if (event.isKeyPressed(agl::Key::Tab))
+		{
+			if (tabToggle)
+			{
+			}
+			else
+			{
+				freecam = !freecam;
+			}
 
-		translate.translate(pos);
-		rotate.rotate(rot);
+			tabToggle = true;
+		}
+		else
+		{
+			tabToggle = false;
+		}
 
-		view = rotate * translate;
+		if (freecam)
+		{
+			agl::Mat4f &view = *(agl::Mat4f *)(long(&camera) + 64);
+
+			agl::Mat4f rotate;
+			agl::Mat4f translate;
+
+			translate.translate(pos);
+			rotate.rotate(rot);
+
+			view = rotate * translate;
+		}
 	}
 }
 
