@@ -61,11 +61,11 @@ class Chair
 class Actor
 {
 	public:
-		std::string		 name;
-		std::string		 voice;
-		agl::Color		 shirtColour;
-		agl::Shape		*shape;
-		agl::Vec<int, 2> pos;
+		std::string		   name;
+		std::string		   voice;
+		agl::Color		   shirtColour;
+		agl::Shape		  *shape;
+		agl::Vec<float, 2> pos;
 
 		Actor(Element &element)
 		{
@@ -128,6 +128,11 @@ class Dialogue
 			content = element.arg[1];
 		}
 };
+
+int genRand(int min, int max)
+{
+	return min + (rand() % (int)(max - min + 1));
+}
 
 int genAudio(Script &script)
 {
@@ -450,10 +455,12 @@ void render(Script &script)
 		event.poll();
 	}
 
-	srand(0);
+	srand(2);
 
 	auto threadFunc = [&]() {
 		int wavIndex = 0;
+
+		bool firstWords = true;
 
 		script.loop([&](Element &element) -> int {
 			if (element.type == "ACTOR")
@@ -461,17 +468,17 @@ void render(Script &script)
 				actor.use([&](std::vector<Actor> *actor) {
 					actor->push_back(element);
 
-					float choice = ((float)rand() / (float)RAND_MAX);
+					int choice = genRand(0, 2);
 
-					if (choice >= (2. / 3))
+					if (choice == 0)
 					{
 						(*actor)[actor->size() - 1].shape = &humanBase;
 					}
-					else if (choice >= (1. / 3))
+					else if (choice == 1)
 					{
 						(*actor)[actor->size() - 1].shape = &humanTpose;
 					}
-					else if (choice >= (0. / 3))
+					else if (choice == 2)
 					{
 						(*actor)[actor->size() - 1].shape = &humanStand;
 					}
@@ -483,6 +490,24 @@ void render(Script &script)
 			}
 			if (element.type == "DIALOGUE")
 			{
+				if (firstWords)
+				{
+					room.use([&](Room *room) {
+						pos.x = room->size.x;
+						pos.y = 4;
+						pos.z = room->size.y;
+
+						agl::Vec<float, 3> target;
+						target.x = pos.x / 2;
+						target.y = 0;
+						target.z = pos.z / 2;
+
+						camera.setView(pos, target, {0, 1, 0});
+					});
+
+					std::this_thread::sleep_for(std::chrono::seconds(1));
+					firstWords = false;
+				}
 				actor.use([&](auto actor) {
 					dialogue = new Dialogue(element, *actor);
 
@@ -491,22 +516,53 @@ void render(Script &script)
 					});
 				});
 
-				room.use([&](Room *room) {
-					pos.x = dialogue->name->pos.x + 3;
-					pos.y = 2.25;
-					pos.z = dialogue->name->pos.y + 3;
-				});
+				if (dialogue->name->pos.x >= 0)
+				{
+					room.use([&](Room *room) {
+						pos.x = dialogue->name->pos.x;
+						pos.y = 2.4;
+						pos.z = dialogue->name->pos.y;
+					});
 
-				agl::Vec<float, 3> target;
-				target.x = dialogue->name->pos.x;
-				target.y = 2.25;
-				target.z = dialogue->name->pos.y;
+					int choice = genRand(0, 1);
 
-				camera.setView(pos, target, {0, 1, 0});
+					agl::Vec<float, 3> target;
 
-				// std::system(("cd tts/result && aplay " + std::to_string(wavIndex) +
-				// ".wav").c_str());
-				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+					if (choice == 0)
+					{
+						pos.x += -1 + .5;
+						pos.z += 1 + .5;
+					}
+					else if (choice == 1)
+					{
+						pos.x += .5 + .5;
+						pos.z += 1 + .5;
+					}
+
+					target.x = dialogue->name->pos.x + .5;
+					target.y = 2.4;
+					target.z = dialogue->name->pos.y + .5;
+
+					camera.setView(pos, target, {0, 1, 0});
+				}
+				else
+				{
+					room.use([&](Room *room) {
+						pos.x = room->size.x;
+						pos.y = 4;
+						pos.z = room->size.y;
+					});
+
+					agl::Vec<float, 3> target;
+					target.x = pos.x / 2;
+					target.y = 0;
+					target.z = pos.z / 2;
+
+					camera.setView(pos, target, {0, 1, 0});
+				}
+
+				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
+				// std::this_thread::sleep_for(std::chrono::seconds(1));
 
 				delete dialogue;
 
@@ -523,6 +579,23 @@ void render(Script &script)
 			if (element.type == "CHAIR")
 			{
 				chair.use([&](std::vector<Chair> *chair) { chair->push_back(element); });
+			}
+			if (element.type == "MOVE")
+			{
+				if (element.arg[1] == "NULL" || element.arg[2] == "NULL")
+				{
+					std::cout << "ACTIVE" << '\n';
+					actor.use([&](std::vector<Actor> *actor) {
+						for (Actor &actor : *actor)
+						{
+							if (element.arg[0] == actor.name)
+							{
+					std::cout << "FOUND" << '\n';
+								actor.pos = {-100, -100};
+							}
+						}
+					});
+				}
 			}
 
 			return 0;
@@ -575,7 +648,10 @@ void render(Script &script)
 				jaw.setSize(shape.getSize());
 				jaw.setColor(actor.shirtColour);
 
-				if (dialogue->name->name == actor.name)
+				if (dialogue == nullptr)
+				{
+				}
+				else if (dialogue->name->name == actor.name)
 				{
 					jaw.setRotation({jawRotation, 0, 0});
 				}
@@ -686,8 +762,8 @@ void render(Script &script)
 			rot.y -= speedRot;
 		}
 
-		bool tabToggle = false;
-		bool freecam   = false;
+		static bool tabToggle = false;
+		static bool freecam	  = false;
 
 		if (event.isKeyPressed(agl::Key::Tab))
 		{
