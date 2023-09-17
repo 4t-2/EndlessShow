@@ -58,6 +58,18 @@ class Chair
 		}
 };
 
+class Couch
+{
+	public:
+		agl::Vec<int, 2> pos;
+
+		Couch(Element &element)
+		{
+			pos.x = std::stoi(element.arg[0]);
+			pos.y = std::stoi(element.arg[1]);
+		}
+};
+
 class Actor
 {
 	public:
@@ -96,6 +108,10 @@ class Actor
 			else if (element.arg[2] == "YELLOW")
 			{
 				shirtColour = {255, 255, 127};
+			}
+			else if (element.arg[2] == "WHITE")
+			{
+				shirtColour = {255, 255, 255};
 			}
 
 			pos.x = std::stoi(element.arg[3]);
@@ -214,7 +230,7 @@ int genAudio(Script &script)
 		return 0;
 	});
 
-	return 0;
+	return 1;
 }
 
 template <typename T> class ThreadSafe
@@ -429,13 +445,32 @@ void render(Script &script)
 	jaw.setPosition({0, 0, 0});
 	jaw.setSize({1, 1, 1});
 
-	agl::Rectangle rect;
+	objPath = "assets/chair.obj";
+	agl::Shape chairOBJ(objToShape);
+	chairOBJ.setTexture(&blank);
+	chairOBJ.setColor({139, 69, 19});
+	chairOBJ.setPosition({0, 0, 0});
+	chairOBJ.setSize({1, 1, 1});
+
+	objPath = "assets/couch.obj";
+	agl::Shape couchOBJ(objToShape);
+	couchOBJ.setTexture(&blank);
+	couchOBJ.setColor(agl::Color::Red);
+	couchOBJ.setPosition({0, 0, 0});
+	couchOBJ.setSize({1, 1, 1});
+
+	objPath = "assets/rect.obj";
+	agl::Shape rect(objToShape);
 	rect.setTexture(&blank);
 	rect.setColor(agl::Color::White);
+	rect.setPosition({0, 0, 0});
+	rect.setSize({1, 1, 1});
 
-	agl::Cuboid cube;
+	objPath = "assets/cube.obj";
+	agl::Shape cube(objToShape);
 	cube.setTexture(&blank);
 	cube.setColor(agl::Color::White);
+	cube.setPosition({0, 0, 0});
 	cube.setSize({1, 1, 1});
 
 	agl::Vec<float, 3> pos		   = {0, 0, 0};
@@ -448,6 +483,7 @@ void render(Script &script)
 	ThreadSafe<std::vector<Actor>> actor;
 	ThreadSafe<std::vector<Block>> block;
 	ThreadSafe<std::vector<Chair>> chair;
+	ThreadSafe<std::vector<Couch>> couch;
 	ThreadSafe<Room>			   room;
 
 	while (!event.isKeyPressed(agl::Key::Return))
@@ -455,6 +491,7 @@ void render(Script &script)
 		event.poll();
 	}
 
+	bool freecam = false;
 	srand(2);
 
 	auto threadFunc = [&]() {
@@ -465,6 +502,11 @@ void render(Script &script)
 		script.loop([&](Element &element) -> int {
 			if (element.type == "ACTOR")
 			{
+				if (!firstWords)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(250));
+				}
+
 				actor.use([&](std::vector<Actor> *actor) {
 					actor->push_back(element);
 
@@ -483,6 +525,11 @@ void render(Script &script)
 						(*actor)[actor->size() - 1].shape = &humanStand;
 					}
 				});
+				
+				if (!firstWords)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(250));
+				}
 			}
 			if (element.type == "BLOCK")
 			{
@@ -502,7 +549,10 @@ void render(Script &script)
 						target.y = 0;
 						target.z = pos.z / 2;
 
-						camera.setView(pos, target, {0, 1, 0});
+						if (!freecam)
+						{
+							camera.setView(pos, target, {0, 1, 0});
+						}
 					});
 
 					std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -516,7 +566,10 @@ void render(Script &script)
 					});
 				});
 
-				if (dialogue->name->pos.x >= 0)
+				if (freecam)
+				{
+				}
+				else if (dialogue->name->pos.x >= 0)
 				{
 					room.use([&](Room *room) {
 						pos.x = dialogue->name->pos.x;
@@ -561,10 +614,12 @@ void render(Script &script)
 					camera.setView(pos, target, {0, 1, 0});
 				}
 
-				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) + ".wav").c_str());
+				std::system(("cd tts/result && aplay " + std::to_string(wavIndex) +
+				".wav").c_str());
 				// std::this_thread::sleep_for(std::chrono::seconds(1));
 
 				delete dialogue;
+				dialogue = nullptr;
 
 				wavIndex++;
 			}
@@ -580,21 +635,121 @@ void render(Script &script)
 			{
 				chair.use([&](std::vector<Chair> *chair) { chair->push_back(element); });
 			}
+			if (element.type == "COUCH")
+			{
+				couch.use([&](std::vector<Couch> *couch) { couch->push_back(element); });
+			}
 			if (element.type == "MOVE")
 			{
+				room.use([&](Room *room) {
+					pos.x = room->size.x;
+					pos.y = 4;
+					pos.z = room->size.y;
+
+					agl::Vec<float, 3> target;
+					target.x = pos.x / 2;
+					target.y = 0;
+					target.z = pos.z / 2;
+
+					if (!freecam)
+					{
+						camera.setView(pos, target, {0, 1, 0});
+					}
+				});
+
 				if (element.arg[1] == "NULL" || element.arg[2] == "NULL")
 				{
-					std::cout << "ACTIVE" << '\n';
+					std::this_thread::sleep_for(std::chrono::milliseconds(250));
 					actor.use([&](std::vector<Actor> *actor) {
 						for (Actor &actor : *actor)
 						{
 							if (element.arg[0] == actor.name)
 							{
-					std::cout << "FOUND" << '\n';
 								actor.pos = {-100, -100};
 							}
 						}
 					});
+					std::this_thread::sleep_for(std::chrono::milliseconds(250));
+				}
+				else
+				{
+					agl::Vec<float, 2> start;
+					agl::Vec<float, 2> end;
+
+					Actor *moving = nullptr;
+
+					actor.use([&](std::vector<Actor> *actor) {
+						for (Actor &actor : *actor)
+						{
+							if (element.arg[0] == actor.name)
+							{
+								moving = &actor;
+								start  = actor.pos;
+								break;
+							}
+						}
+					});
+
+					end.x = std::stoi(element.arg[1]);
+					end.y = std::stoi(element.arg[2]);
+
+					agl::Vec<float, 2> direction = (end - start).normalized() * .1;
+
+					if (std::isnan(direction.x))
+					{
+						direction.x = 0;
+					}
+					if (std::isnan(direction.y))
+					{
+						direction.y = 0;
+					}
+
+					bool loop = true;
+
+					while (loop)
+					{
+						if (direction.x == 0 && direction.y == 0)
+						{
+							break;
+						}
+
+						actor.use([&](auto) {
+							(*moving).pos += direction;
+
+							if (direction.x < 0)
+							{
+								if ((*moving).pos.x < end.x)
+								{
+									loop = false;
+								}
+							}
+							if (direction.y < 0)
+							{
+								if ((*moving).pos.y < end.y)
+								{
+									loop = false;
+								}
+							}
+							if (direction.x > 0)
+							{
+								if ((*moving).pos.x > end.x)
+								{
+									loop = false;
+								}
+							}
+							if (direction.y > 0)
+							{
+								if ((*moving).pos.y > end.y)
+								{
+									loop = false;
+								}
+							}
+						});
+
+						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					}
+
+					actor.use([&](auto) { (*moving).pos = end; });
 				}
 			}
 
@@ -628,9 +783,8 @@ void render(Script &script)
 		// Draw room
 		rect.setOffset({0, 0, 0});
 		rect.setPosition({0, 0, 0});
-		room.use([&](Room *room) { rect.setSize(room->size); });
-		rect.setColor(agl::Color::Gray);
-		rect.setRotation({-90, 0, 90});
+		room.use([&](Room *room) { rect.setSize({(float)room->size.x, 1, -(float)room->size.y}); });
+		rect.setColor(agl::Color{15, 15, 15});
 
 		window.drawShape(rect);
 
@@ -661,6 +815,25 @@ void render(Script &script)
 				}
 
 				window.drawShape(jaw);
+			}
+		});
+
+		// draw chairs
+		chair.use([&](std::vector<Chair> *block) {
+			for (Chair chair : *block)
+			{
+				chairOBJ.setPosition(agl::Vec<float, 3>{(float)chair.pos.x, 0, (float)chair.pos.y} +
+									 agl::Vec<float, 3>{.5, 0, .5});
+				window.drawShape(chairOBJ);
+			}
+		});
+
+		// draw couchs
+		couch.use([&](std::vector<Couch> *block) {
+			for (Couch couch : *block)
+			{
+				couchOBJ.setPosition({(float)couch.pos.x, 0, (float)couch.pos.y});
+				window.drawShape(couchOBJ);
 			}
 		});
 
@@ -763,7 +936,6 @@ void render(Script &script)
 		}
 
 		static bool tabToggle = false;
-		static bool freecam	  = false;
 
 		if (event.isKeyPressed(agl::Key::Tab))
 		{
@@ -773,6 +945,8 @@ void render(Script &script)
 			else
 			{
 				freecam = !freecam;
+				pos		= {0, -10, 0};
+				rot		= {90, 0, 0};
 			}
 
 			tabToggle = true;
